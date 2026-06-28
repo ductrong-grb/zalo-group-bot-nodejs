@@ -11,7 +11,7 @@ const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const MY_GROUP_ID = process.env.GROUP_ID; // ID nhóm để bot hoạt động
 
 // Danh sách Admin ID (thay bằng ID thật của bạn)
-const ADMIN_IDS = ['id_admin_1', 'id_admin_2']; // 👈 THAY THẾ BẰNG ID THỰC TẾ
+const ADMIN_IDS = ['c7d3be1b0946e918b957', 'id_admin_2']; // 👈 THAY THẾ BẰNG ID THỰC TẾ
 
 // Tên admin và phó nhóm (có thể lấy từ biến môi trường hoặc config)
 const ADMIN_NAME = process.env.ADMIN_NAME || 'Admin';
