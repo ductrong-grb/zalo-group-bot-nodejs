@@ -27,7 +27,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 7860;
 
 // ================================================================
-// 4. HÀM GỬI TIN NHẮN QUA ZALO API (CHUẨN MỚI)
+// 4. HÀM GỬI TIN NHẮN QUA ZALO API
 // ================================================================
 async function sendZaloMessage(chatId, text) {
     const url = `https://bot-api.zaloplatforms.com/bot${ZALO_BOT_TOKEN}/sendMessage`;
@@ -46,10 +46,8 @@ async function sendZaloMessage(chatId, text) {
 }
 
 // ================================================================
-// 5. HÀM TƯƠNG TÁC VỚI SUPABASE (CẤU HÌNH & DỮ LIỆU)
+// 5. HÀM TƯƠNG TÁC VỚI SUPABASE (GIỮ NGUYÊN)
 // ================================================================
-
-// ---- Lấy một cấu hình từ bảng bot_config ----
 async function getConfig(key) {
     const { data, error } = await supabase
         .from('bot_config')
@@ -57,14 +55,13 @@ async function getConfig(key) {
         .eq('key', key)
         .single();
     if (error) {
-        if (error.code === 'PGRST116') return null; // không tìm thấy
+        if (error.code === 'PGRST116') return null;
         console.error(`❌ Lỗi lấy config ${key}:`, error);
         return null;
     }
     return data?.value;
 }
 
-// ---- Cập nhật/Upsert cấu hình ----
 async function setConfig(key, value) {
     const { error } = await supabase
         .from('bot_config')
@@ -76,7 +73,6 @@ async function setConfig(key, value) {
     return true;
 }
 
-// ---- Lấy tất cả trigger (từ khóa → phản hồi) ----
 async function getAllTriggers() {
     const { data, error } = await supabase
         .from('bot_triggers')
@@ -88,7 +84,6 @@ async function getAllTriggers() {
     return data || [];
 }
 
-// ---- Lấy tất cả filter (từ cấm → câu dằn mặt) ----
 async function getAllFilters() {
     const { data, error } = await supabase
         .from('bot_filters')
@@ -100,7 +95,6 @@ async function getAllFilters() {
     return data || [];
 }
 
-// ---- Thêm hoặc cập nhật trigger ----
 async function setTrigger(keyword, response) {
     const { error } = await supabase
         .from('bot_triggers')
@@ -112,7 +106,6 @@ async function setTrigger(keyword, response) {
     return true;
 }
 
-// ---- Xoá trigger ----
 async function removeTrigger(keyword) {
     const { error } = await supabase
         .from('bot_triggers')
@@ -125,7 +118,6 @@ async function removeTrigger(keyword) {
     return true;
 }
 
-// ---- Thêm hoặc cập nhật filter (từ cấm + phản hồi) ----
 async function addFilter(word, response) {
     const { error } = await supabase
         .from('bot_filters')
@@ -137,7 +129,6 @@ async function addFilter(word, response) {
     return true;
 }
 
-// ---- Xoá filter ----
 async function removeFilter(word) {
     const { error } = await supabase
         .from('bot_filters')
@@ -150,10 +141,9 @@ async function removeFilter(word) {
     return true;
 }
 
-// ---- Lấy cấu hình spam (có fallback) ----
 async function getSpamConfig() {
     const limit = await getConfig('spam_limit') || '5';
-    const timeMs = await getConfig('spam_time') || '10000'; // 10 giây mặc định
+    const timeMs = await getConfig('spam_time') || '10000';
     const response = await getConfig('spam_response') || 'Đừng spam bạn êi!';
     return {
         limit: parseInt(limit, 10),
@@ -163,14 +153,11 @@ async function getSpamConfig() {
 }
 
 // ================================================================
-// 6. XỬ LÝ LỆNH ADMIN (CHAT PRIVATE) - SỬ DỤNG DẤU "|" LÀM SEPARATOR
+// 6. XỬ LÝ LỆNH ADMIN (CHAT PRIVATE) - SỬ DỤNG DẤU "|"
 // ================================================================
-
 async function handleAdminCommand(text, chatId) {
-    // Tách lấy command (từ đầu tiên)
     const firstSpace = text.indexOf(' ');
     if (firstSpace === -1) {
-        // Không có tham số
         await sendZaloMessage(chatId, '❌ Lệnh không hợp lệ. Xem hướng dẫn sử dụng.');
         return;
     }
@@ -181,7 +168,6 @@ async function handleAdminCommand(text, chatId) {
 
     switch (command) {
         case 'setwelcome': {
-            // !setwelcome <nội dung>  (không dùng "|")
             if (!argString) {
                 reply = '⚠️ Vui lòng cung cấp nội dung lời chào.';
                 break;
@@ -190,9 +176,7 @@ async function handleAdminCommand(text, chatId) {
             reply = ok ? '✅ Đã cập nhật lời chào mừng!' : '❌ Cập nhật thất bại.';
             break;
         }
-
         case 'set': {
-            // !set <từ khóa> | <câu trả lời>
             const parts = argString.split('|').map(s => s.trim());
             if (parts.length < 2 || !parts[0] || !parts[1]) {
                 reply = '⚠️ Cú pháp: !set <từ khóa> | <câu trả lời>';
@@ -204,9 +188,7 @@ async function handleAdminCommand(text, chatId) {
             reply = ok ? `✅ Đã lưu trigger cho từ khóa "${keyword}"` : '❌ Lỗi lưu trigger';
             break;
         }
-
         case 'unset': {
-            // !unset <từ khóa>
             if (!argString) {
                 reply = '⚠️ Vui lòng cung cấp từ khóa cần xoá.';
                 break;
@@ -216,9 +198,7 @@ async function handleAdminCommand(text, chatId) {
             reply = ok ? `✅ Đã xoá trigger cho từ khóa "${keyword}"` : '❌ Xoá thất bại (có thể không tồn tại)';
             break;
         }
-
         case 'addfilter': {
-            // !addfilter <từ cấm> | <câu dằn mặt>
             const parts = argString.split('|').map(s => s.trim());
             if (parts.length < 2 || !parts[0] || !parts[1]) {
                 reply = '⚠️ Cú pháp: !addfilter <từ cấm> | <câu dằn mặt>';
@@ -230,9 +210,7 @@ async function handleAdminCommand(text, chatId) {
             reply = ok ? `✅ Đã thêm filter cho từ "${word}"` : '❌ Lỗi thêm filter';
             break;
         }
-
         case 'remfilter': {
-            // !remfilter <từ cấm>
             if (!argString) {
                 reply = '⚠️ Vui lòng cung cấp từ cần xoá khỏi danh sách cấm.';
                 break;
@@ -242,9 +220,7 @@ async function handleAdminCommand(text, chatId) {
             reply = ok ? `✅ Đã xoá từ "${word}" khỏi danh sách cấm` : '❌ Xoá thất bại (có thể không tồn tại)';
             break;
         }
-
         case 'setspam': {
-            // !setspam <số_tin> | <số_giây> | <câu_dằn_mặt>
             const parts = argString.split('|').map(s => s.trim());
             if (parts.length < 3 || !parts[0] || !parts[1] || !parts[2]) {
                 reply = '⚠️ Cú pháp: !setspam <số_tin> | <số_giây> | <câu dằn mặt>';
@@ -268,7 +244,6 @@ async function handleAdminCommand(text, chatId) {
             }
             break;
         }
-
         default:
             reply = '❌ Lệnh không hợp lệ. Hỗ trợ: !setwelcome, !set, !unset, !addfilter, !remfilter, !setspam';
     }
@@ -279,68 +254,66 @@ async function handleAdminCommand(text, chatId) {
 }
 
 // ================================================================
-// 7. WEBHOOK CHÍNH
+// 7. BỘ ĐỆM CHỐNG SPAM & DỌN DẸP
 // ================================================================
+const userChatLog = {}; // { groupId: { senderId: [timestamp, ...] } }
 
-// --- Bộ đệm chống spam (lưu theo nhóm và user) ---
-const userChatLog = {}; // { groupId: { senderId: [timestamp1, timestamp2, ...] } }
-
-/**
- * Dọn dẹp bộ nhớ userChatLog:
- * - Xóa các timestamp cũ hơn 15 phút.
- * - Nếu một user không còn timestamp nào, xóa user đó.
- * - Nếu một group không còn user nào, xóa group đó.
- */
 function cleanupChatLog() {
     const now = Date.now();
     const FIFTEEN_MINUTES = 15 * 60 * 1000;
-
     for (const groupId of Object.keys(userChatLog)) {
         const group = userChatLog[groupId];
         let groupEmpty = true;
         for (const senderId of Object.keys(group)) {
             const timestamps = group[senderId];
-            // Giữ lại các timestamp trong vòng 15 phút gần đây
             const recent = timestamps.filter(ts => now - ts < FIFTEEN_MINUTES);
             if (recent.length > 0) {
                 group[senderId] = recent;
                 groupEmpty = false;
             } else {
-                delete group[senderId]; // Xóa user nếu không còn timestamp nào
+                delete group[senderId];
             }
         }
         if (groupEmpty) {
-            delete userChatLog[groupId]; // Xóa cả group nếu rỗng
+            delete userChatLog[groupId];
         }
     }
     console.log('🧹 Đã dọn dẹp bộ nhớ userChatLog.');
 }
-
-// Chạy dọn dẹp mỗi 15 phút
 setInterval(cleanupChatLog, 15 * 60 * 1000);
 
 // ================================================================
-// ENDPOINT WEBHOOK
+// 8. WEBHOOK CHÍNH (CẬP NHẬT BẮT SỰ KIỆN JOIN/ADD GROUP)
 // ================================================================
+
 app.post('/webhook', async (req, res) => {
     try {
         const body = req.body;
-        console.log('📩 Webhook nhận:', JSON.stringify(body, null, 2));
+        // ---- DEBUG: In toàn bộ webhook để xem cấu trúc ----
+        console.log('📩 Debug Webhook:', JSON.stringify(body, null, 2));
 
         const eventName = body.event_name;
 
-        // ---------- Sự kiện thành viên mới (user.join.group) ----------
-        if (eventName === 'user.join.group') {
-            const groupId = body.group_id;
-            const userId = body.user_id;
-            const userName = body.user_name || 'Thành viên mới';
+        // ---------- Sự kiện thành viên mới (user.join.group & user.add.group) ----------
+        if (eventName === 'user.join.group' || eventName === 'user.add.group') {
+            // Lấy groupId một cách linh hoạt
+            const groupId = body.group_id || body.data?.group_id || body.message?.chat?.id;
+            // Lấy userName
+            const userName = body.user_name || body.data?.user_name || 'Thành viên mới';
+            // Lấy userId (không dùng nhưng có thể lưu log)
+            const userId = body.user_id || body.data?.user_id || '';
+
             if (!groupId) {
-                console.log('⚠️ Không có group_id, bỏ qua user_join.');
+                console.log('⚠️ Không tìm thấy groupId, bỏ qua sự kiện join/ add.');
                 return res.status(200).send('OK');
             }
+
+            // Lấy lời chào từ Supabase
             const welcomeText = await getConfig('welcome_message') || 'Chào mừng bạn đến với nhóm!';
-            const msg = `👋 Chào mừng @${userName} tham gia nhóm!\n\n${welcomeText}`;
+            const msg = `👋 Chào mừng ${userName} tham gia nhóm!\n\n${welcomeText}`;
+
             await sendZaloMessage(groupId, msg);
+            console.log(`✅ Đã gửi lời chào đến nhóm ${groupId} cho ${userName}`);
             return res.status(200).send('OK');
         }
 
@@ -349,7 +322,7 @@ app.post('/webhook', async (req, res) => {
             const messageData = body.message || {};
             const text = messageData.text || '';
             const chat = messageData.chat || {};
-            const chatType = chat.chat_type;   // 'PRIVATE' hoặc 'GROUP'
+            const chatType = chat.chat_type;
             const chatId = chat.id;
             const from = messageData.from || {};
             const senderId = from.id;
@@ -357,7 +330,7 @@ app.post('/webhook', async (req, res) => {
 
             if (!chatId) return res.status(200).send('OK');
 
-            // ---------- PRIVATE: khu vực admin ----------
+            // PRIVATE: Khu vực admin
             if (chatType === 'PRIVATE') {
                 if (text.startsWith('!')) {
                     const command = text.substring(1).trim();
@@ -376,52 +349,45 @@ app.post('/webhook', async (req, res) => {
                 return res.status(200).send('OK');
             }
 
-            // ---------- GROUP: xử lý tự động ----------
+            // GROUP: Xử lý tự động
             if (chatType === 'GROUP') {
-                // Bỏ qua tin nhắn bắt đầu bằng '!' để bảo mật
                 if (text.startsWith('!')) {
                     console.log('🔇 Bỏ qua tin nhắn ! trong nhóm.');
                     return res.status(200).send('OK');
                 }
 
-                // ---- KIỂM TRA SPAM TRƯỚC ----
+                // ---- SPAM ----
                 const spamCfg = await getSpamConfig();
-                // Khởi tạo log cho nhóm nếu chưa có
                 if (!userChatLog[chatId]) userChatLog[chatId] = {};
                 if (!userChatLog[chatId][senderId]) userChatLog[chatId][senderId] = [];
 
                 const now = Date.now();
                 const timestamps = userChatLog[chatId][senderId];
-                // Giữ lại các timestamp trong khoảng thời gian cho phép
                 const recent = timestamps.filter(ts => now - ts < spamCfg.timeMs);
                 recent.push(now);
                 userChatLog[chatId][senderId] = recent;
 
                 if (recent.length > spamCfg.limit) {
-                    // Vượt ngưỡng spam → gửi câu dằn mặt và bỏ qua tin nhắn này
                     await sendZaloMessage(chatId, spamCfg.response);
                     return res.status(200).send('OK');
                 }
 
-                // ---- ƯU TIÊN KIỂM TRA FILTER (từ cấm) TRƯỚC ----
+                // ---- ƯU TIÊN FILTER (từ cấm) ----
                 const filters = await getAllFilters();
                 const matchedFilter = filters.find(f => text.includes(f.word));
                 if (matchedFilter) {
-                    // Nếu dính từ cấm, gửi câu dằn mặt và ngắt luồng ngay
                     await sendZaloMessage(chatId, matchedFilter.response);
                     return res.status(200).send('OK');
                 }
 
-                // ---- SAU ĐÓ KIỂM TRA TRIGGER (từ khóa thường) ----
+                // ---- TRIGGER (từ khóa thường) ----
                 const triggers = await getAllTriggers();
                 const matchedTrigger = triggers.find(t => text.includes(t.keyword));
                 if (matchedTrigger) {
                     await sendZaloMessage(chatId, matchedTrigger.response);
-                    // Ngắt luồng để tránh xử lý thêm
                     return res.status(200).send('OK');
                 }
 
-                // Nếu không khớp gì, im lặng
                 return res.status(200).send('OK');
             }
 
@@ -439,14 +405,14 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ================================================================
-// 8. ENDPOINT KIỂM TRA TRẠNG THÁI
+// 9. ENDPOINT KIỂM TRA TRẠNG THÁI
 // ================================================================
 app.get('/', (req, res) => {
     res.send('Bot Zalo with Supabase is Running!');
 });
 
 // ================================================================
-// 9. KHỞI ĐỘNG SERVER
+// 10. KHỞI ĐỘNG SERVER
 // ================================================================
 app.listen(PORT, () => {
     console.log(`🚀 Bot đang chạy tại cổng ${PORT}`);
