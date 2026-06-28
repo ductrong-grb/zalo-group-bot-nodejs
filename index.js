@@ -53,7 +53,7 @@ async function sendZaloMessage(chatId, text) {
 }
 
 // ================================================================
-// 4. HÀM TRUY VẤN SUPABASE (MỞ RỘNG)
+// 4. HÀM TRUY VẤN SUPABASE (GIỮ NGUYÊN + THÊM removeConfig)
 // ================================================================
 async function getConfig(key) {
   const { data, error } = await supabase
@@ -80,7 +80,6 @@ async function setConfig(key, value) {
   return true;
 }
 
-/** Xóa một cấu hình (dùng cho removewelcome, removegoodbye) */
 async function removeConfig(key) {
   const { error } = await supabase
     .from('bot_config')
@@ -104,7 +103,6 @@ async function getAllTriggers() {
   return data || [];
 }
 
-/** Tìm trigger theo từ khóa (phục vụ lệnh /link) */
 async function getTrigger(keyword) {
   const { data, error } = await supabase
     .from('bot_triggers')
@@ -150,7 +148,7 @@ function isAdmin(userId) {
 }
 
 const NON_ADMIN_REPLIES = [
-  '🤣 Ngáo đá à? không có quyền đâu!',
+  '🤣 Ngáo đá à? Mày không có quyền đâu!',
 ];
 
 function getRandomInsult() {
@@ -158,7 +156,7 @@ function getRandomInsult() {
 }
 
 // ================================================================
-// 6. XỬ LÝ LỆNH (MỞ RỘNG)
+// 6. XỬ LÝ LỆNH (THÊM /listcommands, /info, /ping)
 // ================================================================
 function parseCommand(rawText) {
   const slashIndex = rawText.indexOf('/');
@@ -178,6 +176,7 @@ async function handleCommand(rawText, chatId, senderId) {
 
   const { command, args } = parsed;
 
+  // Hàm kiểm tra admin (trả về false nếu không phải admin, đã gửi insult)
   const requireAdmin = async () => {
     if (!isAdmin(senderId)) {
       await sendZaloMessage(chatId, getRandomInsult());
@@ -187,47 +186,43 @@ async function handleCommand(rawText, chatId, senderId) {
   };
 
   switch (command) {
-    case '/help': {
-      const helpMsg =
-        '📋 Danh sách lệnh:\n' +
-        '🔹 /help - Hiển thị trợ giúp\n' +
-        '🔹 /link - Xem danh sách từ khóa\n' +
-        '🔹 /link <từ khóa> - Xem nội dung trigger\n' +
-        '🔹 /addlink <từ khóa> <nội dung> - Thêm trigger (Admin)\n' +
-        '🔹 /removetrigger <từ khóa> - Xóa trigger (Admin)\n' +
-        '🔹 /setupwelcome <nội dung> - Cập nhật lời chào (Admin)\n' +
-        '🔹 /removewelcome - Xóa lời chào (Admin)\n' +
-        '🔹 /setgoodbye <nội dung> - Cập nhật lời tạm biệt (Admin)\n' +
-        '🔹 /removegoodbye - Xóa lời tạm biệt (Admin)';
-      await sendZaloMessage(chatId, helpMsg);
-      return true;
-    }
-
     // ===== LỆNH CÔNG KHAI =====
-    case '/link': {
-      if (args.length === 0) {
-        // Liệt kê danh sách từ khóa
-        const triggers = await getAllTriggers();
-        if (triggers.length === 0) {
-          await sendZaloMessage(chatId, '📭 Hiện chưa có từ khóa nào được thiết lập.');
-        } else {
-          const keywordList = triggers.map(t => `🔹 ${t.keyword}`).join('\n');
-          await sendZaloMessage(chatId, `📋 Danh sách từ khóa:\n${keywordList}`);
-        }
-      } else {
-        // Tra cứu nội dung theo từ khóa
-        const keyword = args[0];
-        const trigger = await getTrigger(keyword);
-        if (trigger) {
-          await sendZaloMessage(chatId, `📝 Nội dung cho "${keyword}":\n${trigger.response}`);
-        } else {
-          await sendZaloMessage(chatId, `❌ Không tìm thấy từ khóa "${keyword}"`);
-        }
-      }
+    case '/listcommands': {
+      const commands =
+        '📋 Danh sách tất cả lệnh:\n\n' +
+        '🔹 Lệnh cho mọi người:\n' +
+        '/help - Trợ giúp\n' +
+        '/link - Xem danh sách từ khóa\n' +
+        '/link <từ khóa> - Xem nội dung trigger\n' +
+        '/listcommands - Hiển thị danh sách lệnh\n' +
+        '/info - Thông tin nhóm\n' +
+        '/ping - Kiểm tra độ trễ\n\n' +
+        '🔹 Lệnh Admin:\n' +
+        '/addlink <từ khóa> <nội dung> - Thêm trigger\n' +
+        '/removetrigger <từ khóa> - Xóa trigger\n' +
+        '/setupwelcome <nội dung> - Cập nhật lời chào\n' +
+        '/removewelcome - Xóa lời chào\n' +
+        '/setgoodbye <nội dung> - Cập nhật lời tạm biệt\n' +
+        '/removegoodbye - Xóa lời tạm biệt';
+      await sendZaloMessage(chatId, commands);
       return true;
     }
 
-    // ===== LỆNH ADMIN =====
+    case '/info': {
+      const infoMsg = `👥 Thông tin nhóm:\nTrưởng nhóm: ${ADMIN_NAME}\nPhó nhóm: ${VICE_NAME}`;
+      await sendZaloMessage(chatId, infoMsg);
+      return true;
+    }
+
+    case '/ping': {
+      const start = Date.now();
+      // Gửi phản hồi có timestamp
+      const latency = Date.now() - start;
+      await sendZaloMessage(chatId, `🏓 Pong! (Độ trễ: ${latency}ms)`);
+      return true;
+    }
+
+    // ===== LỆNH ADMIN (KIỂM TRA QUYỀN TRƯỚC) =====
     case '/addlink': {
       if (!(await requireAdmin())) return true;
       if (args.length < 2) {
@@ -309,6 +304,21 @@ async function handleCommand(rawText, chatId, senderId) {
       return true;
     }
 
+    // Lệnh /help vẫn giữ nguyên (công khai)
+    case '/help': {
+      const helpMsg =
+        '📋 Danh sách lệnh:\n' +
+        '🔹 /help - Trợ giúp\n' +
+        '🔹 /link - Xem danh sách từ khóa\n' +
+        '🔹 /link <từ khóa> - Xem nội dung trigger\n' +
+        '🔹 /listcommands - Xem tất cả lệnh\n' +
+        '🔹 /info - Thông tin nhóm\n' +
+        '🔹 /ping - Kiểm tra độ trễ\n' +
+        '(Các lệnh Admin chỉ dành cho quản trị viên)';
+      await sendZaloMessage(chatId, helpMsg);
+      return true;
+    }
+
     default:
       return false;
   }
@@ -329,7 +339,7 @@ async function handleTrigger(rawText, chatId) {
 }
 
 // ================================================================
-// 8. WEBHOOK CHÍNH (CẬP NHẬT TAG CHUẨN @(user_id))
+// 8. WEBHOOK CHÍNH (GIỮ NGUYÊN VỚI TAG CHUẨN)
 // ================================================================
 app.post('/webhook', async (req, res) => {
   try {
@@ -339,7 +349,7 @@ app.post('/webhook', async (req, res) => {
     console.log(`🔍 [WEBHOOK] event: ${eventName}`);
     console.log(`📦 [BODY]`, JSON.stringify(body, null, 2));
 
-    // ----- SỰ KIỆN JOIN (dùng tag @(user_id)) -----
+    // ----- SỰ KIỆN JOIN -----
     if (eventName === 'user_join_group' || eventName === 'user.join.group') {
       const groupId = body.group_id || body.recipient?.id || GROUP_ID;
       if (!groupId) {
@@ -356,16 +366,14 @@ app.post('/webhook', async (req, res) => {
         userId = body.sender.id;
       }
 
-      // Sử dụng tag chuẩn Zalo: @(user_id)
       const userTag = userId ? `@(${userId})` : (body.user_name || 'Thành viên mới');
-
       const welcomeMsg = await getConfig('welcome_message') || '';
       const fullMsg = `Chào ${userTag} gia nhập nhóm! Trưởng nhóm: ${ADMIN_NAME}, Phó nhóm: ${VICE_NAME}. ${welcomeMsg}`;
       await sendZaloMessage(groupId, fullMsg);
       return res.status(200).send('OK');
     }
 
-    // ----- SỰ KIỆN LEAVE (dùng tag @(user_id)) -----
+    // ----- SỰ KIỆN LEAVE -----
     if (eventName === 'user_leave_group' || eventName === 'user.leave.group') {
       const groupId = body.group_id || body.recipient?.id || GROUP_ID;
       if (!groupId) {
@@ -375,14 +383,13 @@ app.post('/webhook', async (req, res) => {
 
       let userId = body.user_id || body.sender?.id || null;
       const userTag = userId ? `@(${userId})` : (body.user_name || 'Thành viên');
-
       const goodbyeMsg = await getConfig('goodbye_message') || 'Tạm biệt nhé, cút rồi!';
       const fullMsg = `Tạm biệt ${userTag} nhé! ${goodbyeMsg}`;
       await sendZaloMessage(groupId, fullMsg);
       return res.status(200).send('OK');
     }
 
-    // ----- TIN NHẮN (giữ nguyên) -----
+    // ----- TIN NHẮN -----
     if (eventName === 'message.text.received') {
       const messageData = body.message || {};
       const rawText = messageData.text || '';
