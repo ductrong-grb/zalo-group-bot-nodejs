@@ -20,7 +20,7 @@ if (!ZALO_BOT_TOKEN || !SUPABASE_URL || !SUPABASE_KEY) {
 }
 
 // Định nghĩa ADMIN_IDS (chú ý: nên dùng const để tránh ghi đè)
-const ADMIN_IDS = ['c7d3be1b0946e918b957'];
+const ADMIN_IDS = ["c7d3be1b0946e918b957"];
 
 // ================================================================
 // 2. KHỞI TẠO SUPABASE & EXPRESS
