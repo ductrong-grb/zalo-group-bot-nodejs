@@ -19,7 +19,7 @@ if (!ZALO_BOT_TOKEN || !SUPABASE_URL || !SUPABASE_KEY) {
   process.exit(1);
 }
 
-const ADMIN_IDS = 'c7d3be1b0946e918b957';
+const ADMIN_IDS = ['c7d3be1b0946e918b957'];
 
 // ================================================================
 // 2. KHỞI TẠO SUPABASE & EXPRESS
