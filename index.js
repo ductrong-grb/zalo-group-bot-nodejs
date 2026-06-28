@@ -8,10 +8,15 @@ const { createClient } = require('@supabase/supabase-js');
 const ZALO_BOT_TOKEN = process.env.ZALO_BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
+const MY_GROUP_ID = process.env.GROUP_ID; // ID nhóm mặc định
 
 if (!ZALO_BOT_TOKEN || !SUPABASE_URL || !SUPABASE_KEY) {
     console.error('❌ THIẾU BIẾN MÔI TRƯỜNG: Cần đặt ZALO_BOT_TOKEN, SUPABASE_URL, SUPABASE_KEY');
     process.exit(1);
+}
+
+if (!MY_GROUP_ID) {
+    console.warn('⚠️ Chưa đặt GROUP_ID, bot sẽ chỉ xử lý tin nhắn từ webhook có group_id.');
 }
 
 // ================================================================
@@ -256,7 +261,7 @@ async function handleAdminCommand(text, chatId) {
 // ================================================================
 // 7. BỘ ĐỆM CHỐNG SPAM & DỌN DẸP
 // ================================================================
-const userChatLog = {}; // { groupId: { senderId: [timestamp, ...] } }
+const userChatLog = {};
 
 function cleanupChatLog() {
     const now = Date.now();
@@ -283,55 +288,80 @@ function cleanupChatLog() {
 setInterval(cleanupChatLog, 15 * 60 * 1000);
 
 // ================================================================
-// 8. WEBHOOK CHÍNH (CẬP NHẬT BẮT SỰ KIỆN JOIN/ADD GROUP)
+// 8. WEBHOOK CHÍNH (SỬA LOGIC BẮT SỰ KIỆN NHÓM)
 // ================================================================
 
 app.post('/webhook', async (req, res) => {
     try {
         const body = req.body;
-        // ---- DEBUG: In toàn bộ webhook để xem cấu trúc ----
-        console.log('📩 Debug Webhook:', JSON.stringify(body, null, 2));
-
         const eventName = body.event_name;
 
-        // ---------- Sự kiện thành viên mới (user.join.group & user.add.group) ----------
+        // ---- DEBUG: In toàn bộ webhook ----
+        console.log(`🔍 DEBUG EVENT: ${eventName}`, JSON.stringify(body, null, 2));
+
+        // ---------- SỰ KIỆN THÀNH VIÊN MỚI (JOIN/ADD) ----------
         if (eventName === 'user.join.group' || eventName === 'user.add.group') {
-            // Lấy groupId một cách linh hoạt
-            const groupId = body.group_id || body.data?.group_id || body.message?.chat?.id;
-            // Lấy userName
-            const userName = body.user_name || body.data?.user_name || 'Thành viên mới';
-            // Lấy userId (không dùng nhưng có thể lưu log)
+            // Lấy groupId từ nhiều nguồn, dùng MY_GROUP_ID làm fallback
+            let groupId = body.group_id || body.data?.group_id || body.message?.chat?.id;
+            if (!groupId && MY_GROUP_ID) {
+                groupId = MY_GROUP_ID;
+                console.log(`ℹ️ Sử dụng GROUP_ID mặc định: ${groupId}`);
+            }
             const userId = body.user_id || body.data?.user_id || '';
+            const userName = body.user_name || body.data?.user_name || 'Thành viên mới';
 
             if (!groupId) {
-                console.log('⚠️ Không tìm thấy groupId, bỏ qua sự kiện join/ add.');
+                console.error('❌ Không có groupId và không có GROUP_ID mặc định.');
                 return res.status(200).send('OK');
             }
 
-            // Lấy lời chào từ Supabase
             const welcomeText = await getConfig('welcome_message') || 'Chào mừng bạn đến với nhóm!';
             const msg = `👋 Chào mừng ${userName} tham gia nhóm!\n\n${welcomeText}`;
-
             await sendZaloMessage(groupId, msg);
             console.log(`✅ Đã gửi lời chào đến nhóm ${groupId} cho ${userName}`);
             return res.status(200).send('OK');
         }
 
-        // ---------- Sự kiện tin nhắn chữ (message.text.received) ----------
+        // ---------- SỰ KIỆN TIN NHẮN CHỮ ----------
         if (eventName === 'message.text.received') {
             const messageData = body.message || {};
             const text = messageData.text || '';
             const chat = messageData.chat || {};
-            const chatType = chat.chat_type;
-            const chatId = chat.id;
+            const chatType = chat.chat_type; // có thể là 'PRIVATE' hoặc 'GROUP'
+            let chatId = chat.id;
+
+            // Nếu không có chatId, thử lấy từ các trường khác
+            if (!chatId) {
+                chatId = body.recipient?.id || body.group_id || MY_GROUP_ID;
+            }
+
+            // Nếu không có chatType, thử suy luận
+            let isPrivate = false;
+            if (chatType === 'PRIVATE') isPrivate = true;
+            else if (chatType === 'GROUP') isPrivate = false;
+            else {
+                // Nếu không có chatType, dựa vào sự tồn tại của recipient.type hoặc group_id
+                if (body.recipient?.type === 'user') isPrivate = true;
+                else if (body.recipient?.type === 'group') isPrivate = false;
+                else {
+                    // Mặc định coi là PRIVATE nếu có sender và không có group_id
+                    isPrivate = !body.group_id;
+                }
+            }
+
             const from = messageData.from || {};
             const senderId = from.id;
             const senderName = from.display_name || 'Thành viên';
 
-            if (!chatId) return res.status(200).send('OK');
+            if (!chatId) {
+                console.error('❌ Không thể xác định chatId.');
+                return res.status(200).send('OK');
+            }
 
-            // PRIVATE: Khu vực admin
-            if (chatType === 'PRIVATE') {
+            // ==========================================
+            // 1. XỬ LÝ CHAT PRIVATE (ADMIN)
+            // ==========================================
+            if (isPrivate) {
                 if (text.startsWith('!')) {
                     const command = text.substring(1).trim();
                     await handleAdminCommand(command, chatId);
@@ -349,52 +379,51 @@ app.post('/webhook', async (req, res) => {
                 return res.status(200).send('OK');
             }
 
-            // GROUP: Xử lý tự động
-            if (chatType === 'GROUP') {
-                if (text.startsWith('!')) {
-                    console.log('🔇 Bỏ qua tin nhắn ! trong nhóm.');
-                    return res.status(200).send('OK');
-                }
-
-                // ---- SPAM ----
-                const spamCfg = await getSpamConfig();
-                if (!userChatLog[chatId]) userChatLog[chatId] = {};
-                if (!userChatLog[chatId][senderId]) userChatLog[chatId][senderId] = [];
-
-                const now = Date.now();
-                const timestamps = userChatLog[chatId][senderId];
-                const recent = timestamps.filter(ts => now - ts < spamCfg.timeMs);
-                recent.push(now);
-                userChatLog[chatId][senderId] = recent;
-
-                if (recent.length > spamCfg.limit) {
-                    await sendZaloMessage(chatId, spamCfg.response);
-                    return res.status(200).send('OK');
-                }
-
-                // ---- ƯU TIÊN FILTER (từ cấm) ----
-                const filters = await getAllFilters();
-                const matchedFilter = filters.find(f => text.includes(f.word));
-                if (matchedFilter) {
-                    await sendZaloMessage(chatId, matchedFilter.response);
-                    return res.status(200).send('OK');
-                }
-
-                // ---- TRIGGER (từ khóa thường) ----
-                const triggers = await getAllTriggers();
-                const matchedTrigger = triggers.find(t => text.includes(t.keyword));
-                if (matchedTrigger) {
-                    await sendZaloMessage(chatId, matchedTrigger.response);
-                    return res.status(200).send('OK');
-                }
-
+            // ==========================================
+            // 2. XỬ LÝ CHAT NHÓM (GROUP)
+            // ==========================================
+            // Bỏ qua tin nhắn bắt đầu bằng '!'
+            if (text.startsWith('!')) {
+                console.log('🔇 Bỏ qua tin nhắn ! trong nhóm.');
                 return res.status(200).send('OK');
             }
 
-            console.log(`⚠️ Chat_type không xác định: ${chatType}`);
+            // ---- KIỂM TRA SPAM ----
+            const spamCfg = await getSpamConfig();
+            if (!userChatLog[chatId]) userChatLog[chatId] = {};
+            if (!userChatLog[chatId][senderId]) userChatLog[chatId][senderId] = [];
+
+            const now = Date.now();
+            const timestamps = userChatLog[chatId][senderId];
+            const recent = timestamps.filter(ts => now - ts < spamCfg.timeMs);
+            recent.push(now);
+            userChatLog[chatId][senderId] = recent;
+
+            if (recent.length > spamCfg.limit) {
+                await sendZaloMessage(chatId, spamCfg.response);
+                return res.status(200).send('OK');
+            }
+
+            // ---- ƯU TIÊN FILTER (từ cấm) ----
+            const filters = await getAllFilters();
+            const matchedFilter = filters.find(f => text.includes(f.word));
+            if (matchedFilter) {
+                await sendZaloMessage(chatId, matchedFilter.response);
+                return res.status(200).send('OK');
+            }
+
+            // ---- TRIGGER (từ khóa thường) ----
+            const triggers = await getAllTriggers();
+            const matchedTrigger = triggers.find(t => text.includes(t.keyword));
+            if (matchedTrigger) {
+                await sendZaloMessage(chatId, matchedTrigger.response);
+                return res.status(200).send('OK');
+            }
+
             return res.status(200).send('OK');
         }
 
+        // ---------- CÁC SỰ KIỆN KHÁC ----------
         console.log(`ℹ️ Sự kiện không hỗ trợ: ${eventName}`);
         res.status(200).send('OK');
 
