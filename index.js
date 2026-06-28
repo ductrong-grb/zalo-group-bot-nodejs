@@ -53,7 +53,7 @@ async function sendZaloMessage(chatId, text) {
 }
 
 // ================================================================
-// 4. HÀM TRUY VẤN SUPABASE (GIỮ NGUYÊN + THÊM removeConfig)
+// 4. HÀM TRUY VẤN SUPABASE (GIỮ NGUYÊN)
 // ================================================================
 async function getConfig(key) {
   const { data, error } = await supabase
@@ -141,14 +141,23 @@ async function removeTrigger(keyword) {
 }
 
 // ================================================================
-// 5. KIỂM TRA ADMIN & CÂU CÀ KHỊA
+// 5. KIỂM TRA ADMIN (CÓ ÉP KIỂU VÀ LOG DEBUG)
 // ================================================================
 function isAdmin(userId) {
-  return ADMIN_IDS.includes(userId);
+  // Ép kiểu về String và log để debug
+  const idStr = String(userId);
+  console.log(`🔍 Đang kiểm tra quyền cho ID: "${idStr}"`);
+  const result = ADMIN_IDS.includes(idStr);
+  console.log(`🔍 Kết quả: ${result ? '✅ LÀ ADMIN' : '❌ KHÔNG PHẢI ADMIN'}`);
+  return result;
 }
 
 const NON_ADMIN_REPLIES = [
+  '🤡 Mày tưởng mày là ai mà dám dùng lệnh admin hả?',
+  '😂 Cút mẹ mày đi, không phải admin mà đòi xài lệnh?',
   '🤣 Ngáo đá à? Mày không có quyền đâu!',
+  '😏 Thôi đi ông ơi, về học lại đi rồi hẵng nói.',
+  '🙄 Nhìn mặt mày mà đòi làm admin hả?',
 ];
 
 function getRandomInsult() {
@@ -156,12 +165,22 @@ function getRandomInsult() {
 }
 
 // ================================================================
-// 6. XỬ LÝ LỆNH (THÊM /listcommands, /info, /ping)
+// 6. XỬ LÝ LỆNH (CẬP NHẬT PARSE COMMAND - LOẠI BỎ TAG BOT)
 // ================================================================
+
+/**
+ * Trích xuất lệnh từ tin nhắn, loại bỏ tag bot ở đầu.
+ * Ví dụ: "@Bot Mahiru /help" -> "/help"
+ * Sử dụng regex để loại bỏ @... ở đầu (có thể chứa khoảng trắng)
+ */
 function parseCommand(rawText) {
-  const slashIndex = rawText.indexOf('/');
+  // Loại bỏ tag bot: @TênBot (có thể có khoảng trắng phía sau)
+  // Pattern: bắt đầu bằng @, theo sau là bất kỳ ký tự nào không phải khoảng trắng, và có thể có khoảng trắng
+  const cleaned = rawText.replace(/^@\S+\s*/, '').trim();
+  // Tìm dấu '/' trong phần đã làm sạch
+  const slashIndex = cleaned.indexOf('/');
   if (slashIndex === -1) return null;
-  const commandPart = rawText.slice(slashIndex).trim();
+  const commandPart = cleaned.slice(slashIndex).trim();
   const parts = commandPart.split(/\s+/);
   if (parts.length === 0) return null;
   return {
@@ -176,7 +195,7 @@ async function handleCommand(rawText, chatId, senderId) {
 
   const { command, args } = parsed;
 
-  // Hàm kiểm tra admin (trả về false nếu không phải admin, đã gửi insult)
+  // Hàm kiểm tra admin (có log)
   const requireAdmin = async () => {
     if (!isAdmin(senderId)) {
       await sendZaloMessage(chatId, getRandomInsult());
@@ -216,7 +235,6 @@ async function handleCommand(rawText, chatId, senderId) {
 
     case '/ping': {
       const start = Date.now();
-      // Gửi phản hồi có timestamp
       const latency = Date.now() - start;
       await sendZaloMessage(chatId, `🏓 Pong! (Độ trễ: ${latency}ms)`);
       return true;
@@ -304,7 +322,6 @@ async function handleCommand(rawText, chatId, senderId) {
       return true;
     }
 
-    // Lệnh /help vẫn giữ nguyên (công khai)
     case '/help': {
       const helpMsg =
         '📋 Danh sách lệnh:\n' +
@@ -339,7 +356,7 @@ async function handleTrigger(rawText, chatId) {
 }
 
 // ================================================================
-// 8. WEBHOOK CHÍNH (GIỮ NGUYÊN VỚI TAG CHUẨN)
+// 8. WEBHOOK CHÍNH (GIỮ NGUYÊN)
 // ================================================================
 app.post('/webhook', async (req, res) => {
   try {
