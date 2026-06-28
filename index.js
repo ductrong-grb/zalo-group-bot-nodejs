@@ -19,6 +19,7 @@ if (!ZALO_BOT_TOKEN || !SUPABASE_URL || !SUPABASE_KEY) {
   process.exit(1);
 }
 
+// Định nghĩa ADMIN_IDS (chú ý: nên dùng const để tránh ghi đè)
 const ADMIN_IDS = ['c7d3be1b0946e918b957'];
 
 // ================================================================
@@ -30,7 +31,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 7860;
 
 // ================================================================
-// 3. HÀM GỬI TIN NHẮN (GIỮ NGUYÊN)
+// 3. HÀM GỬI TIN NHẮN
 // ================================================================
 async function sendZaloMessage(chatId, text) {
   if (!chatId) {
@@ -141,19 +142,42 @@ async function removeTrigger(keyword) {
 }
 
 // ================================================================
-// 5. KIỂM TRA ADMIN (CÓ ÉP KIỂU VÀ LOG DEBUG)
+// 5. KIỂM TRA ADMIN (SIÊU CHẶT CHẼ, CÓ LOG CHI TIẾT)
 // ================================================================
 function isAdmin(userId) {
-  // Ép kiểu về String và log để debug
-  const idStr = String(userId);
-  console.log(`🔍 Đang kiểm tra quyền cho ID: "${idStr}"`);
-  const result = ADMIN_IDS.includes(idStr);
-  console.log(`🔍 Kết quả: ${result ? '✅ LÀ ADMIN' : '❌ KHÔNG PHẢI ADMIN'}`);
-  return result;
+  // Ép kiểu sang chuỗi và loại bỏ khoảng trắng hai đầu
+  const rawId = String(userId);
+  const trimmedId = rawId.trim();
+
+  // Log thông tin chi tiết để debug
+  console.log('🔍 ===== BẮT ĐẦU KIỂM TRA ADMIN =====');
+  console.log(`🔍 User ID gốc: "${rawId}"`);
+  console.log(`🔍 User ID sau trim: "${trimmedId}"`);
+  console.log(`🔍 Độ dài user ID: ${rawId.length} (sau trim: ${trimmedId.length})`);
+  
+  // Log ADMIN_IDS hiện tại để kiểm tra xem có bị ghi đè không
+  console.log(`🔍 ADMIN_IDS hiện tại:`, JSON.stringify(ADMIN_IDS));
+  
+  // So sánh từng phần tử trong ADMIN_IDS (có trim)
+  const isAdmin = ADMIN_IDS.some(adminId => {
+    const trimmedAdmin = String(adminId).trim();
+    console.log(`🔍 So sánh "${trimmedId}" với "${trimmedAdmin}" => ${trimmedId === trimmedAdmin}`);
+    return trimmedId === trimmedAdmin;
+  });
+
+  console.log(`🔍 Kết quả cuối cùng: ${isAdmin ? '✅ LÀ ADMIN' : '❌ KHÔNG PHẢI ADMIN'}`);
+  console.log('🔍 ===== KẾT THÚC KIỂM TRA =====');
+  
+  return isAdmin;
 }
 
+// Mảng câu trả lời cà khịa
 const NON_ADMIN_REPLIES = [
+  '🤡 Mày tưởng mày là ai mà dám dùng lệnh admin hả?',
+  '😂 Cút mẹ mày đi, không phải admin mà đòi xài lệnh?',
   '🤣 Ngáo đá à? Mày không có quyền đâu!',
+  '😏 Thôi đi ông ơi, về học lại đi rồi hẵng nói.',
+  '🙄 Nhìn mặt mày mà đòi làm admin hả?',
 ];
 
 function getRandomInsult() {
@@ -161,19 +185,11 @@ function getRandomInsult() {
 }
 
 // ================================================================
-// 6. XỬ LÝ LỆNH (CẬP NHẬT PARSE COMMAND - LOẠI BỎ TAG BOT)
+// 6. XỬ LÝ LỆNH
 // ================================================================
-
-/**
- * Trích xuất lệnh từ tin nhắn, loại bỏ tag bot ở đầu.
- * Ví dụ: "@Bot Mahiru /help" -> "/help"
- * Sử dụng regex để loại bỏ @... ở đầu (có thể chứa khoảng trắng)
- */
 function parseCommand(rawText) {
-  // Loại bỏ tag bot: @TênBot (có thể có khoảng trắng phía sau)
-  // Pattern: bắt đầu bằng @, theo sau là bất kỳ ký tự nào không phải khoảng trắng, và có thể có khoảng trắng
+  // Loại bỏ tag bot và khoảng trắng thừa
   const cleaned = rawText.replace(/^@\S+\s*/, '').trim();
-  // Tìm dấu '/' trong phần đã làm sạch
   const slashIndex = cleaned.indexOf('/');
   if (slashIndex === -1) return null;
   const commandPart = cleaned.slice(slashIndex).trim();
@@ -191,7 +207,6 @@ async function handleCommand(rawText, chatId, senderId) {
 
   const { command, args } = parsed;
 
-  // Hàm kiểm tra admin (có log)
   const requireAdmin = async () => {
     if (!isAdmin(senderId)) {
       await sendZaloMessage(chatId, getRandomInsult());
@@ -338,7 +353,7 @@ async function handleCommand(rawText, chatId, senderId) {
 }
 
 // ================================================================
-// 7. XỬ LÝ TRIGGER TỰ ĐỘNG (GIỮ NGUYÊN)
+// 7. XỬ LÝ TRIGGER TỰ ĐỘNG
 // ================================================================
 async function handleTrigger(rawText, chatId) {
   const triggers = await getAllTriggers();
@@ -352,7 +367,7 @@ async function handleTrigger(rawText, chatId) {
 }
 
 // ================================================================
-// 8. WEBHOOK CHÍNH (GIỮ NGUYÊN)
+// 8. WEBHOOK CHÍNH
 // ================================================================
 app.post('/webhook', async (req, res) => {
   try {
@@ -362,7 +377,6 @@ app.post('/webhook', async (req, res) => {
     console.log(`🔍 [WEBHOOK] event: ${eventName}`);
     console.log(`📦 [BODY]`, JSON.stringify(body, null, 2));
 
-    // ----- SỰ KIỆN JOIN -----
     if (eventName === 'user_join_group' || eventName === 'user.join.group') {
       const groupId = body.group_id || body.recipient?.id || GROUP_ID;
       if (!groupId) {
@@ -386,7 +400,6 @@ app.post('/webhook', async (req, res) => {
       return res.status(200).send('OK');
     }
 
-    // ----- SỰ KIỆN LEAVE -----
     if (eventName === 'user_leave_group' || eventName === 'user.leave.group') {
       const groupId = body.group_id || body.recipient?.id || GROUP_ID;
       if (!groupId) {
@@ -402,7 +415,6 @@ app.post('/webhook', async (req, res) => {
       return res.status(200).send('OK');
     }
 
-    // ----- TIN NHẮN -----
     if (eventName === 'message.text.received') {
       const messageData = body.message || {};
       const rawText = messageData.text || '';
@@ -452,4 +464,4 @@ app.get('/', (req, res) => {
 // ================================================================
 app.listen(PORT, () => {
   console.log(`🚀 Bot đang chạy tại cổng ${PORT}`);
-});
+}); 
