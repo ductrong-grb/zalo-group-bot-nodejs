@@ -19,8 +19,7 @@ if (!ZALO_BOT_TOKEN || !SUPABASE_URL || !SUPABASE_KEY) {
   process.exit(1);
 }
 
-// Định nghĩa ADMIN_IDS (chú ý: nên dùng const để tránh ghi đè)
-const ADMIN_IDS = ["c7d3be1b0946e918b957"];
+const ADMIN_IDS = ['c7d3be1b0946e918b957'];
 
 // ================================================================
 // 2. KHỞI TẠO SUPABASE & EXPRESS
@@ -31,7 +30,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 7860;
 
 // ================================================================
-// 3. HÀM GỬI TIN NHẮN
+// 3. HÀM GỬI TIN NHẮN (GIỮ NGUYÊN)
 // ================================================================
 async function sendZaloMessage(chatId, text) {
   if (!chatId) {
@@ -142,27 +141,36 @@ async function removeTrigger(keyword) {
 }
 
 // ================================================================
-// 5. KIỂM TRA ADMIN (SIÊU CHẶT CHẼ, CÓ LOG CHI TIẾT)
+// 5. HÀM LÀM SẠCH CHUỖI (LOẠI BỎ KÝ TỰ ẨN)
+// ================================================================
+/**
+ * Loại bỏ tất cả ký tự không phải chữ cái hoặc số,
+ * chuyển sang chữ thường.
+ * Dùng để so sánh ID một cách an toàn.
+ */
+function cleanString(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/[^a-zA-Z0-9]/g, '') // Chỉ giữ chữ cái và số
+    .toLowerCase();
+}
+
+// ================================================================
+// 6. KIỂM TRA ADMIN (VỚI LÀM SẠCH TUYỆT ĐỐI)
 // ================================================================
 function isAdmin(userId) {
-  // Ép kiểu sang chuỗi và loại bỏ khoảng trắng hai đầu
-  const rawId = String(userId);
-  const trimmedId = rawId.trim();
-
-  // Log thông tin chi tiết để debug
   console.log('🔍 ===== BẮT ĐẦU KIỂM TRA ADMIN =====');
-  console.log(`🔍 User ID gốc: "${rawId}"`);
-  console.log(`🔍 User ID sau trim: "${trimmedId}"`);
-  console.log(`🔍 Độ dài user ID: ${rawId.length} (sau trim: ${trimmedId.length})`);
   
-  // Log ADMIN_IDS hiện tại để kiểm tra xem có bị ghi đè không
+  const cleanUserId = cleanString(userId);
+  console.log(`🔍 User ID gốc : "${userId}"`);
+  console.log(`🔍 User ID sau clean: "${cleanUserId}"`);
   console.log(`🔍 ADMIN_IDS hiện tại:`, JSON.stringify(ADMIN_IDS));
-  
-  // So sánh từng phần tử trong ADMIN_IDS (có trim)
+
+  // Làm sạch từng adminId và so sánh
   const isAdmin = ADMIN_IDS.some(adminId => {
-    const trimmedAdmin = String(adminId).trim();
-    console.log(`🔍 So sánh "${trimmedId}" với "${trimmedAdmin}" => ${trimmedId === trimmedAdmin}`);
-    return trimmedId === trimmedAdmin;
+    const cleanAdminId = cleanString(adminId);
+    console.log(`🔍 So sánh "${cleanUserId}" với "${cleanAdminId}" => ${cleanUserId === cleanAdminId}`);
+    return cleanUserId === cleanAdminId;
   });
 
   console.log(`🔍 Kết quả cuối cùng: ${isAdmin ? '✅ LÀ ADMIN' : '❌ KHÔNG PHẢI ADMIN'}`);
@@ -185,7 +193,7 @@ function getRandomInsult() {
 }
 
 // ================================================================
-// 6. XỬ LÝ LỆNH
+// 7. XỬ LÝ LỆNH
 // ================================================================
 function parseCommand(rawText) {
   // Loại bỏ tag bot và khoảng trắng thừa
@@ -353,7 +361,7 @@ async function handleCommand(rawText, chatId, senderId) {
 }
 
 // ================================================================
-// 7. XỬ LÝ TRIGGER TỰ ĐỘNG
+// 8. XỬ LÝ TRIGGER TỰ ĐỘNG
 // ================================================================
 async function handleTrigger(rawText, chatId) {
   const triggers = await getAllTriggers();
@@ -367,7 +375,7 @@ async function handleTrigger(rawText, chatId) {
 }
 
 // ================================================================
-// 8. WEBHOOK CHÍNH
+// 9. WEBHOOK CHÍNH
 // ================================================================
 app.post('/webhook', async (req, res) => {
   try {
@@ -453,15 +461,15 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ================================================================
-// 9. ENDPOINT KIỂM TRA
+// 10. ENDPOINT KIỂM TRA
 // ================================================================
 app.get('/', (req, res) => {
   res.send('Bot Zalo is Running!');
 });
 
 // ================================================================
-// 10. KHỞI ĐỘNG SERVER
+// 11. KHỞI ĐỘNG SERVER
 // ================================================================
 app.listen(PORT, () => {
   console.log(`🚀 Bot đang chạy tại cổng ${PORT}`);
-}); 
+});
