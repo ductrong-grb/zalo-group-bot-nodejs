@@ -153,11 +153,7 @@ function isAdmin(userId) {
 }
 
 const NON_ADMIN_REPLIES = [
-  '🤡 Mày tưởng mày là ai mà dám dùng lệnh admin hả?',
-  '😂 Cút mẹ mày đi, không phải admin mà đòi xài lệnh?',
   '🤣 Ngáo đá à? Mày không có quyền đâu!',
-  '😏 Thôi đi ông ơi, về học lại đi rồi hẵng nói.',
-  '🙄 Nhìn mặt mày mà đòi làm admin hả?',
 ];
 
 function getRandomInsult() {
