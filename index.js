@@ -186,11 +186,7 @@ function isAdmin(userId) {
 
 // Mảng câu trả lời "bố láo" / cà khịa ngẫu nhiên
 const RANDOM_REPLIES = [
-  'Tag cái gì mà tag, thích ăn đấm không? 😡',
   'Kêu bố có việc gì đấy con trai? 😏',
-  'Đừng có tag vô tri thế chứ bạn ơi! 🙄',
-  'Tưởng tui là trợ lý ảo của mày hả? Hứ! 🤨',
-  'Tag tag gì mà tag, không thấy bố đang bận à? 😤',
 ];
 
 function getRandomReply() {
@@ -198,11 +194,7 @@ function getRandomReply() {
 }
 
 const NON_ADMIN_REPLIES = [
-  '🤡 Mày tưởng mày là ai mà dám dùng lệnh admin hả?',
-  '😂 Cút mẹ mày đi, không phải admin mà đòi xài lệnh?',
   '🤣 Ngáo đá à? Mày không có quyền đâu!',
-  '😏 Thôi đi ông ơi, về học lại đi rồi hẵng nói.',
-  '🙄 Nhìn mặt mày mà đòi làm admin hả?',
 ];
 
 function getRandomInsult() {
