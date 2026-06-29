@@ -12,7 +12,8 @@ const {
   GROUP_ID,
   ADMIN_NAME = 'Admin',
   VICE_NAME = 'Phó nhóm',
-  ADMIN_ID
+  ADMIN_ID,
+  BOT_NAME = 'Bot Mahiru'  // 👈 THÊM BIẾN NÀY: tên hiển thị của bot
 } = process.env;
 
 if (!ZALO_BOT_TOKEN || !SUPABASE_URL || !SUPABASE_KEY) {
@@ -57,7 +58,7 @@ async function sendZaloMessage(chatId, text) {
 }
 
 // ================================================================
-// 4. HÀM TRUY VẤN SUPABASE
+// 4. HÀM TRUY VẤN SUPABASE (GIỮ NGUYÊN)
 // ================================================================
 async function getConfig(key) {
   const { data, error } = await supabase
@@ -183,7 +184,7 @@ function isAdmin(userId) {
   }
 }
 
-// Mảng câu trả lời "bố láo" / cà khịa
+// Mảng câu trả lời "bố láo"
 const RANDOM_REPLIES = [
   'Tag cái gì mà tag, thích ăn đấm không? 😡',
   'Kêu bố có việc gì đấy con trai? 😏',
@@ -197,7 +198,11 @@ function getRandomReply() {
 }
 
 const NON_ADMIN_REPLIES = [
+  '🤡 Mày tưởng mày là ai mà dám dùng lệnh admin hả?',
+  '😂 Cút mẹ mày đi, không phải admin mà đòi xài lệnh?',
   '🤣 Ngáo đá à? Mày không có quyền đâu!',
+  '😏 Thôi đi ông ơi, về học lại đi rồi hẵng nói.',
+  '🙄 Nhìn mặt mày mà đòi làm admin hả?',
 ];
 
 function getRandomInsult() {
@@ -208,7 +213,9 @@ function getRandomInsult() {
 // 6. XỬ LÝ LỆNH
 // ================================================================
 function parseCommand(rawText) {
-  const cleaned = rawText.replace(/^@\S+\s*/, '').trim();
+  // Sử dụng BOT_NAME để loại bỏ tag một cách chính xác
+  const botName = process.env.BOT_NAME || 'Bot Mahiru';
+  const cleaned = rawText.replace(new RegExp('^@' + botName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*'), '').trim();
   const slashIndex = cleaned.indexOf('/');
   if (slashIndex === -1) return null;
   const commandPart = cleaned.slice(slashIndex).trim();
@@ -379,7 +386,7 @@ async function handleCommand(rawText, chatId, senderId) {
 }
 
 // ================================================================
-// 7. XỬ LÝ FILTER TỰ ĐỘNG (KHÔNG PHÂN BIỆT HOA THƯỜNG)
+// 7. XỬ LÝ FILTER TỰ ĐỘNG
 // ================================================================
 async function handleFilter(text, chatId) {
   if (!text) return false;
@@ -467,28 +474,34 @@ app.post('/webhook', async (req, res) => {
         return res.status(200).send('OK');
       }
 
-      // Xác định có tag bot không
-      const hasTag = /^@\S+/.test(rawText.trim());
-      const cleanedText = rawText.replace(/^@\S+\s*/, '').trim();
+      // ---- LOẠI BỎ TAG BOT CHÍNH XÁC BẰNG BOT_NAME ----
+      const botName = process.env.BOT_NAME || 'Bot Mahiru';
+      // Escape regex special chars
+      const escapedBotName = botName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const tagRegex = new RegExp('^@' + escapedBotName + '\\s*');
+      let textToProcess = rawText.trim();
+      const hasTag = textToProcess.match(tagRegex);
+      if (hasTag) {
+        textToProcess = textToProcess.replace(tagRegex, '').trim();
+      }
 
-      // Chỉ tag bot (không nội dung)
-      if (hasTag && cleanedText === '') {
+      console.log(`🔍 [DEBUG] rawText: "${rawText}"`);
+      console.log(`🔍 [DEBUG] textToProcess: "${textToProcess}"`);
+
+      // Trường hợp: chỉ tag bot, không nội dung
+      if (textToProcess === '') {
         await sendZaloMessage(chatId, getRandomReply());
         return res.status(200).send('OK');
       }
 
-      // Tag bot + có nội dung
-      if (hasTag && cleanedText !== '') {
-        // Xử lý lệnh (nếu có)
-        const isCommand = await handleCommand(cleanedText, chatId, senderId);
-        if (isCommand) return res.status(200).send('OK');
-        // Nếu không phải lệnh, chạy filter trên cleanedText (đã loại bỏ tag)
-        await handleFilter(cleanedText, chatId);
+      // Xử lý lệnh (nếu có dấu '/')
+      const isCommand = await handleCommand(textToProcess, chatId, senderId);
+      if (isCommand) {
         return res.status(200).send('OK');
       }
 
-      // Không tag bot: chạy filter trên rawText
-      await handleFilter(rawText, chatId);
+      // Xử lý filter tự động
+      await handleFilter(textToProcess, chatId);
       return res.status(200).send('OK');
     }
 
