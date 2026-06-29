@@ -96,7 +96,6 @@ async function removeConfig(key) {
   return true;
 }
 
-// Lấy tất cả các filter key (có prefix 'filter_')
 async function getAllFilters() {
   const { data, error } = await supabase
     .from('bot_config')
@@ -184,9 +183,13 @@ function isAdmin(userId) {
   }
 }
 
-// Mảng câu trả lời "bố láo" / cà khịa ngẫu nhiên
+// Mảng câu trả lời "bố láo" / cà khịa
 const RANDOM_REPLIES = [
-  'Kêu bố có việc gì đấy con trai? 😏', 
+  'Tag cái gì mà tag, thích ăn đấm không? 😡',
+  'Kêu bố có việc gì đấy con trai? 😏',
+  'Đừng có tag vô tri thế chứ bạn ơi! 🙄',
+  'Tưởng tui là trợ lý ảo của mày hả? Hứ! 🤨',
+  'Tag tag gì mà tag, không thấy bố đang bận à? 😤',
 ];
 
 function getRandomReply() {
@@ -376,15 +379,17 @@ async function handleCommand(rawText, chatId, senderId) {
 }
 
 // ================================================================
-// 7. XỬ LÝ TRIGGER TỰ ĐỘNG (Filter)
+// 7. XỬ LÝ FILTER TỰ ĐỘNG (KHÔNG PHÂN BIỆT HOA THƯỜNG)
 // ================================================================
-async function handleFilter(rawText, chatId) {
-  console.log(`🔍 [handleFilter] Đang kiểm tra text: "${rawText}"`);
+async function handleFilter(text, chatId) {
+  if (!text) return false;
+  console.log(`🔍 [handleFilter] Đang kiểm tra text: "${text}"`);
   const filters = await getAllFilters();
   console.log(`🔍 [handleFilter] Số filter tìm thấy: ${filters.length}`);
+  const lowerText = text.toLowerCase();
   for (const f of filters) {
-    const keyword = f.key.replace('filter_', '');
-    if (rawText.includes(keyword)) {
+    const keyword = f.key.replace('filter_', '').toLowerCase();
+    if (lowerText.includes(keyword)) {
       console.log(`🔍 [handleFilter] Match! keyword="${keyword}", response="${f.value}"`);
       await sendZaloMessage(chatId, f.value);
       return true;
@@ -395,7 +400,7 @@ async function handleFilter(rawText, chatId) {
 }
 
 // ================================================================
-// 8. WEBHOOK CHÍNH (SỬA FILTER LUÔN QUÉT RAW TEXT)
+// 8. WEBHOOK CHÍNH
 // ================================================================
 app.post('/webhook', async (req, res) => {
   try {
@@ -477,14 +482,12 @@ app.post('/webhook', async (req, res) => {
         // Xử lý lệnh (nếu có)
         const isCommand = await handleCommand(cleanedText, chatId, senderId);
         if (isCommand) return res.status(200).send('OK');
-
-        // Nếu không phải lệnh, chạy filter trên toàn bộ tin nhắn gốc (bao gồm tag)
-        // để đảm bảo tìm kiếm từ khóa trong toàn bộ nội dung
-        await handleFilter(rawText, chatId);
+        // Nếu không phải lệnh, chạy filter trên cleanedText (đã loại bỏ tag)
+        await handleFilter(cleanedText, chatId);
         return res.status(200).send('OK');
       }
 
-      // Không tag bot: chạy filter trên toàn bộ tin nhắn gốc
+      // Không tag bot: chạy filter trên rawText
       await handleFilter(rawText, chatId);
       return res.status(200).send('OK');
     }
