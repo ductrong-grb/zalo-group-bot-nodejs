@@ -10,9 +10,9 @@ const {
   SUPABASE_URL,
   SUPABASE_KEY,
   GROUP_ID,
-  ADMIN_NAME = 'Admin',
-  VICE_NAME = 'Phó nhóm',
-  ADMIN_ID  // 👈 Đọc ADMIN_ID từ biến môi trường
+  ADMIN_NAME = '@trong',
+  VICE_NAME = '@trong',
+  ADMIN_ID
 } = process.env;
 
 if (!ZALO_BOT_TOKEN || !SUPABASE_URL || !SUPABASE_KEY) {
@@ -57,7 +57,7 @@ async function sendZaloMessage(chatId, text) {
 }
 
 // ================================================================
-// 4. HÀM TRUY VẤN SUPABASE (GIỮ NGUYÊN)
+// 4. HÀM TRUY VẤN SUPABASE
 // ================================================================
 async function getConfig(key) {
   const { data, error } = await supabase
@@ -145,13 +145,8 @@ async function removeTrigger(keyword) {
 }
 
 // ================================================================
-// 5. KIỂM TRA ADMIN (SỬ DỤNG BUFFER HEX SO SÁNH)
+// 5. KIỂM TRA ADMIN (BUFFER HEX SO SÁNH)
 // ================================================================
-
-/**
- * So sánh hai chuỗi bằng cách chuyển sang Buffer hex
- * Tránh lỗi ký tự ẩn, khoảng trắng, mã hóa khác
- */
 function isAdmin(userId) {
   if (!userId) {
     console.log('⚠️ userId không hợp lệ (null/undefined).');
@@ -165,7 +160,6 @@ function isAdmin(userId) {
   }
 
   try {
-    // Chuyển cả hai sang Buffer và lấy hex
     const userIdHex = Buffer.from(String(userId), 'utf8').toString('hex');
     const adminIdHex = Buffer.from(String(adminId), 'utf8').toString('hex');
 
@@ -373,38 +367,28 @@ async function handleTrigger(rawText, chatId) {
 }
 
 // ================================================================
-// 8. WEBHOOK CHÍNH
+// 8. WEBHOOK CHÍNH (NÂNG CẤP)
 // ================================================================
 app.post('/webhook', async (req, res) => {
   try {
     const body = req.body;
     const eventName = body.event_name;
 
-    console.log(`🔍 [WEBHOOK] event: ${eventName}`);
-    console.log(`📦 [BODY]`, JSON.stringify(body, null, 2));
+    // ---- LOG FULL BODY ĐỂ DEBUG ----
+    console.log('📦 [FULL WEBHOOK BODY]', JSON.stringify(body, null, 2));
 
-    // ----- LẤY SENDER ID -----
-    let senderId = null;
-    if (body.sender?.id) senderId = body.sender.id;
-    else if (body.message?.from?.id) senderId = body.message.from.id;
-    else if (body.from?.id) senderId = body.from.id;
-    else if (body.user_id) senderId = body.user_id;
-    else if (body.message?.sender?.id) senderId = body.message.sender.id;
+    // ---- CHUẨN HÓA EVENT NAME ----
+    const eventNameLower = (eventName || '').toLowerCase();
 
-    if (!senderId) {
-      console.warn('⚠️ Không tìm thấy senderId trong webhook.');
-    } else {
-      console.log(`📌 Sender ID: "${senderId}"`);
-    }
-
-    // ----- JOIN -----
-    if (eventName === 'user_join_group' || eventName === 'user.join.group') {
+    // ---- XỬ LÝ SỰ KIỆN JOIN (LINH HOẠT) ----
+    if (eventNameLower.includes('join') || eventNameLower === 'user_join_group') {
       const groupId = body.group_id || body.recipient?.id || GROUP_ID;
       if (!groupId) {
         console.warn('⚠️ Không có groupId, bỏ qua join.');
         return res.status(200).send('OK');
       }
 
+      // Lấy userId và userName
       let userId = null;
       if (body.users && Array.isArray(body.users) && body.users.length > 0) {
         userId = body.users[0].id;
@@ -414,30 +398,64 @@ app.post('/webhook', async (req, res) => {
         userId = body.sender.id;
       }
 
-      const userTag = userId ? `@(${userId})` : (body.user_name || 'Thành viên mới');
-      const welcomeMsg = await getConfig('welcome_message') || '';
-      const fullMsg = `Chào ${userTag} gia nhập nhóm! Trưởng nhóm: ${ADMIN_NAME}, Phó nhóm: ${VICE_NAME}. ${welcomeMsg}`;
+      // Lấy tên hiển thị (ưu tiên các trường khác nhau)
+      let userName = body.user_name || body.sender?.name || body.from?.display_name || 'Thành viên mới';
+
+      // Đọc lời chào từ Supabase
+      let welcomeMsg = await getConfig('welcome_message');
+      
+      // Nếu không có config, dùng câu mặc định
+      if (!welcomeMsg) {
+        welcomeMsg = '🎉 Chào mừng {name} đã tham gia vào nhóm! Chúc bạn có những trải nghiệm vui vẻ cùng mọi người. ✨';
+      }
+
+      // Thay thế các thẻ đại diện bằng tên thật
+      const finalMsg = welcomeMsg
+        .replace(/\{name\}/g, userName)
+        .replace(/\[name\]/g, userName)
+        .replace(/\[Tên_Thành_Vien\]/g, userName);
+
+      // Gửi tin nhắn chào mừng (có tag user nếu có userId)
+      const tag = userId ? `@(${userId})` : userName;
+      const fullMsg = `Chào ${tag}! ${finalMsg}`;
       await sendZaloMessage(groupId, fullMsg);
       return res.status(200).send('OK');
     }
 
-    // ----- LEAVE -----
-    if (eventName === 'user_leave_group' || eventName === 'user.leave.group') {
+    // ---- XỬ LÝ SỰ KIỆN LEAVE (LINH HOẠT) ----
+    if (eventNameLower.includes('leave') || eventNameLower === 'user_leave_group') {
       const groupId = body.group_id || body.recipient?.id || GROUP_ID;
       if (!groupId) {
         console.warn('⚠️ Không có groupId, bỏ qua leave.');
         return res.status(200).send('OK');
       }
 
+      // Lấy userId và userName
       let userId = body.user_id || body.sender?.id || null;
-      const userTag = userId ? `@(${userId})` : (body.user_name || 'Thành viên');
-      const goodbyeMsg = await getConfig('goodbye_message') || 'Tạm biệt nhé, cút rồi!';
-      const fullMsg = `Tạm biệt ${userTag} nhé! ${goodbyeMsg}`;
+      let userName = body.user_name || body.sender?.name || body.from?.display_name || 'Một thành viên';
+
+      // Đọc lời tạm biệt từ Supabase
+      let goodbyeMsg = await getConfig('goodbye_message');
+      
+      // Nếu không có config, dùng câu mặc định
+      if (!goodbyeMsg) {
+        goodbyeMsg = '👋 Tạm biệt {name} đã rời khỏi nhóm.';
+      }
+
+      // Thay thế các thẻ đại diện bằng tên thật
+      const finalMsg = goodbyeMsg
+        .replace(/\{name\}/g, userName)
+        .replace(/\[name\]/g, userName)
+        .replace(/\[Tên_Thành_Vien\]/g, userName);
+
+      // Gửi tin nhắn tạm biệt (có tag user nếu có userId)
+      const tag = userId ? `@(${userId})` : userName;
+      const fullMsg = `Tạm biệt ${tag}! ${finalMsg}`;
       await sendZaloMessage(groupId, fullMsg);
       return res.status(200).send('OK');
     }
 
-    // ----- TIN NHẮN -----
+    // ---- XỬ LÝ TIN NHẮN (GIỮ NGUYÊN) ----
     if (eventName === 'message.text.received' || eventName === 'user_send_group_text') {
       const messageData = body.message || {};
       const rawText = messageData.text || body.text || '';
@@ -445,10 +463,10 @@ app.post('/webhook', async (req, res) => {
       const chatType = chat.chat_type || body.chat_type || 'GROUP';
       const chatId = chat.id || body.recipient?.id || body.group_id || GROUP_ID;
 
-      // Nếu chưa có senderId, thử lấy từ message
+      // Lấy senderId
+      let senderId = body.sender?.id || messageData.from?.id || body.from?.id || body.user_id || messageData.sender?.id;
       if (!senderId) {
-        if (messageData.from?.id) senderId = messageData.from.id;
-        else if (body.sender?.id) senderId = body.sender.id;
+        console.warn('⚠️ Không tìm thấy senderId trong tin nhắn.');
       }
 
       if (!chatId) {
@@ -473,6 +491,7 @@ app.post('/webhook', async (req, res) => {
       return res.status(200).send('OK');
     }
 
+    // ---- CÁC SỰ KIỆN KHÁC ----
     console.log(`ℹ️ Sự kiện không hỗ trợ: ${eventName}`);
     res.status(200).send('OK');
 
