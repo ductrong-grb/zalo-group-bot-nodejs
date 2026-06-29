@@ -186,7 +186,11 @@ function isAdmin(userId) {
 
 // Mảng câu trả lời "bố láo" / cà khịa ngẫu nhiên
 const RANDOM_REPLIES = [
-  'Kêu bố có việc gì?',
+  'Tag cái gì mà tag, thích ăn đấm không? 😡',
+  'Kêu bố có việc gì đấy con trai? 😏',
+  'Đừng có tag vô tri thế chứ bạn ơi! 🙄',
+  'Tưởng tui là trợ lý ảo của mày hả? Hứ! 🤨',
+  'Tag tag gì mà tag, không thấy bố đang bận à? 😤',
 ];
 
 function getRandomReply() {
@@ -194,7 +198,11 @@ function getRandomReply() {
 }
 
 const NON_ADMIN_REPLIES = [
+  '🤡 Mày tưởng mày là ai mà dám dùng lệnh admin hả?',
+  '😂 Cút mẹ mày đi, không phải admin mà đòi xài lệnh?',
   '🤣 Ngáo đá à? Mày không có quyền đâu!',
+  '😏 Thôi đi ông ơi, về học lại đi rồi hẵng nói.',
+  '🙄 Nhìn mặt mày mà đòi làm admin hả?',
 ];
 
 function getRandomInsult() {
@@ -202,7 +210,7 @@ function getRandomInsult() {
 }
 
 // ================================================================
-// 6. XỬ LÝ LỆNH (MỚI: /link, /addlink, /removelink, /filter, /stop, /filters, /help)
+// 6. XỬ LÝ LỆNH
 // ================================================================
 
 function parseCommand(rawText) {
@@ -218,7 +226,7 @@ function parseCommand(rawText) {
   };
 }
 
-// Hàm trả về bảng hướng dẫn lỗi cú pháp (có bổ sung /help)
+// Hàm trả về bảng hướng dẫn lỗi cú pháp
 function getSyntaxHelp() {
   return (
     '⚠️ Lệnh không hợp lệ hoặc sai cú pháp rồi!\n\n' +
@@ -239,7 +247,6 @@ function getSyntaxHelp() {
 async function handleCommand(rawText, chatId, senderId) {
   const parsed = parseCommand(rawText);
   if (!parsed) {
-    // Không có dấu / -> không phải lệnh
     return false;
   }
 
@@ -254,7 +261,6 @@ async function handleCommand(rawText, chatId, senderId) {
   };
 
   switch (command) {
-    // ====== LỆNH CÔNG KHAI ======
     case '/help': {
       const helpMsg =
         '📋 HƯỚNG DẪN SỬ DỤNG BOT:\n\n' +
@@ -310,7 +316,6 @@ async function handleCommand(rawText, chatId, senderId) {
       return true;
     }
 
-    // ====== LỆNH ADMIN ======
     case '/addlink': {
       if (!(await requireAdmin())) return true;
       if (args.length < 2) {
@@ -375,7 +380,6 @@ async function handleCommand(rawText, chatId, senderId) {
       return true;
     }
 
-    // ====== LỆNH KHÔNG HỢP LỆ ======
     default: {
       await sendZaloMessage(chatId, getSyntaxHelp());
       return true;
@@ -399,7 +403,7 @@ async function handleFilter(rawText, chatId) {
 }
 
 // ================================================================
-// 8. WEBHOOK CHÍNH
+// 8. WEBHOOK CHÍNH (ĐÃ SỬA LỖI TAG)
 // ================================================================
 app.post('/webhook', async (req, res) => {
   try {
@@ -410,7 +414,7 @@ app.post('/webhook', async (req, res) => {
 
     const eventNameLower = (eventName || '').toLowerCase();
 
-    // JOIN
+    // ---- JOIN ----
     if (eventNameLower.includes('join') || eventNameLower === 'user_join_group') {
       const groupId = body.group_id || body.recipient?.id || GROUP_ID;
       if (!groupId) {
@@ -429,7 +433,7 @@ app.post('/webhook', async (req, res) => {
       return res.status(200).send('OK');
     }
 
-    // LEAVE
+    // ---- LEAVE ----
     if (eventNameLower.includes('leave') || eventNameLower === 'user_leave_group') {
       const groupId = body.group_id || body.recipient?.id || GROUP_ID;
       if (!groupId) {
@@ -448,7 +452,7 @@ app.post('/webhook', async (req, res) => {
       return res.status(200).send('OK');
     }
 
-    // MESSAGE
+    // ---- MESSAGE ----
     if (eventName === 'message.text.received' || eventName === 'user_send_group_text') {
       const messageData = body.message || {};
       const rawText = messageData.text || body.text || '';
@@ -466,16 +470,39 @@ app.post('/webhook', async (req, res) => {
         return res.status(200).send('OK');
       }
 
-      const hasTag = /^@\S+/.test(rawText.trim());
-      const cleanedText = rawText.replace(/^@\S+\s*/, '').trim();
+      // ---- SỬA LỖI TAG: XỬ LÝ TIN NHẮN CÓ TAG BOT ----
+      const trimmedText = rawText.trim();
+      let hasTag = false;
+      let cleanedText = '';
 
-      // Chỉ tag bot
+      // Tìm vị trí khoảng trắng đầu tiên để tách tag
+      const firstSpace = trimmedText.indexOf(' ');
+      if (firstSpace > 0) {
+        // Có khoảng trắng: tách tag và phần còn lại
+        const possibleTag = trimmedText.substring(0, firstSpace);
+        if (possibleTag.startsWith('@')) {
+          hasTag = true;
+          cleanedText = trimmedText.substring(firstSpace + 1).trim();
+        }
+      } else {
+        // Không có khoảng trắng: kiểm tra xem toàn bộ có phải tag không
+        if (trimmedText.startsWith('@')) {
+          hasTag = true;
+          cleanedText = '';
+        }
+      }
+
+      console.log(`🔍 [DEBUG] rawText: "${rawText}"`);
+      console.log(`🔍 [DEBUG] hasTag: ${hasTag}`);
+      console.log(`🔍 [DEBUG] cleanedText: "${cleanedText}"`);
+
+      // Trường hợp 1: Chỉ tag bot (không có nội dung)
       if (hasTag && cleanedText === '') {
         await sendZaloMessage(chatId, getRandomReply());
         return res.status(200).send('OK');
       }
 
-      // Tag bot + có nội dung
+      // Trường hợp 2: Có tag + có nội dung
       if (hasTag && cleanedText !== '') {
         const isCommand = await handleCommand(cleanedText, chatId, senderId);
         if (isCommand) return res.status(200).send('OK');
@@ -483,7 +510,7 @@ app.post('/webhook', async (req, res) => {
         return res.status(200).send('OK');
       }
 
-      // Không tag bot
+      // Trường hợp 3: Không tag bot → chạy filter
       await handleFilter(rawText, chatId);
       return res.status(200).send('OK');
     }
@@ -508,5 +535,5 @@ app.get('/', (req, res) => {
 // 10. KHỞI ĐỘNG SERVER
 // ================================================================
 app.listen(PORT, () => {
-  console.log(`🚀 Bot đang chạhy tại cổng ${PORT}`);
+  console.log(`🚀 Bot đang chạy tại cổng ${PORT}`);
 });
