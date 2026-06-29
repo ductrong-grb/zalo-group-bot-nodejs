@@ -186,7 +186,7 @@ function isAdmin(userId) {
 
 // Mảng câu trả lời "bố láo" / cà khịa ngẫu nhiên
 const RANDOM_REPLIES = [
-  'Kêu bố có việc gì đấy cnn trhi? 😏',
+  'Kêu bố có việc gì?',
 ];
 
 function getRandomReply() {
@@ -202,13 +202,15 @@ function getRandomInsult() {
 }
 
 // ================================================================
-// 6. HÀM TRÍCH XUẤT LỆNH (CHỈ KIỂM TRA STARTSWITH('/'))
+// 6. XỬ LÝ LỆNH (MỚI: /link, /addlink, /removelink, /filter, /stop, /filters, /help)
 // ================================================================
-function parseCommand(cleanedText) {
-  if (!cleanedText || typeof cleanedText !== 'string' || !cleanedText.trim().startsWith('/')) {
-    return null;
-  }
-  const parts = cleanedText.trim().split(/\s+/);
+
+function parseCommand(rawText) {
+  const cleaned = rawText.replace(/^@\S+\s*/, '').trim();
+  const slashIndex = cleaned.indexOf('/');
+  if (slashIndex === -1) return null;
+  const commandPart = cleaned.slice(slashIndex).trim();
+  const parts = commandPart.split(/\s+/);
   if (parts.length === 0) return null;
   return {
     command: parts[0].toLowerCase(),
@@ -216,11 +218,7 @@ function parseCommand(cleanedText) {
   };
 }
 
-// ================================================================
-// 7. XỬ LÝ LỆNH
-// ================================================================
-
-// Hàm trả về bảng hướng dẫn lỗi cú pháp
+// Hàm trả về bảng hướng dẫn lỗi cú pháp (có bổ sung /help)
 function getSyntaxHelp() {
   return (
     '⚠️ Lệnh không hợp lệ hoặc sai cú pháp rồi!\n\n' +
@@ -238,14 +236,15 @@ function getSyntaxHelp() {
   );
 }
 
-async function handleCommand(cleanedText, chatId, senderId) {
-  // Nếu cleanedText không bắt đầu bằng '/', trả về false để webhook xử lý filter
-  const parsed = parseCommand(cleanedText);
-  if (!parsed) return false;
+async function handleCommand(rawText, chatId, senderId) {
+  const parsed = parseCommand(rawText);
+  if (!parsed) {
+    // Không có dấu / -> không phải lệnh
+    return false;
+  }
 
   const { command, args } = parsed;
 
-  // Hàm yêu cầu admin
   const requireAdmin = async () => {
     if (!isAdmin(senderId)) {
       await sendZaloMessage(chatId, getRandomInsult());
@@ -376,7 +375,7 @@ async function handleCommand(cleanedText, chatId, senderId) {
       return true;
     }
 
-    // ====== LỆNH KHÔNG HỢP LỆ (NHƯNG CÓ DẤU '/') ======
+    // ====== LỆNH KHÔNG HỢP LỆ ======
     default: {
       await sendZaloMessage(chatId, getSyntaxHelp());
       return true;
@@ -385,7 +384,7 @@ async function handleCommand(cleanedText, chatId, senderId) {
 }
 
 // ================================================================
-// 8. XỬ LÝ TRIGGER TỰ ĐỘNG (FILTER)
+// 7. XỬ LÝ TRIGGER TỰ ĐỘNG (Filter)
 // ================================================================
 async function handleFilter(rawText, chatId) {
   const filters = await getAllFilters();
@@ -400,34 +399,25 @@ async function handleFilter(rawText, chatId) {
 }
 
 // ================================================================
-// 9. WEBHOOK CHÍNH
+// 8. WEBHOOK CHÍNH
 // ================================================================
 app.post('/webhook', async (req, res) => {
   try {
     const body = req.body;
     const eventName = body.event_name;
 
-    // ---- LOG FULL BODY ----
     console.log('📦 [FULL WEBHOOK BODY]', JSON.stringify(body, null, 2));
 
-    // ---- CHUẨN HÓA EVENT NAME ----
     const eventNameLower = (eventName || '').toLowerCase();
 
-    // ---- XỬ LÝ JOIN ----
+    // JOIN
     if (eventNameLower.includes('join') || eventNameLower === 'user_join_group') {
       const groupId = body.group_id || body.recipient?.id || GROUP_ID;
       if (!groupId) {
         console.warn('⚠️ Không có groupId, bỏ qua join.');
         return res.status(200).send('OK');
       }
-      let userId = null;
-      if (body.users && Array.isArray(body.users) && body.users.length > 0) {
-        userId = body.users[0].id;
-      } else if (body.user_id) {
-        userId = body.user_id;
-      } else if (body.sender?.id) {
-        userId = body.sender.id;
-      }
+      let userId = body.users?.[0]?.id || body.user_id || body.sender?.id;
       let userName = body.user_name || body.sender?.name || body.from?.display_name || 'Thành viên mới';
       let welcomeMsg = await getConfig('welcome_message') || '🎉 Chào mừng {name} đã tham gia vào nhóm! Chúc bạn có những trải nghiệm vui vẻ cùng mọi người. ✨';
       const finalMsg = welcomeMsg
@@ -439,14 +429,14 @@ app.post('/webhook', async (req, res) => {
       return res.status(200).send('OK');
     }
 
-    // ---- XỬ LÝ LEAVE ----
+    // LEAVE
     if (eventNameLower.includes('leave') || eventNameLower === 'user_leave_group') {
       const groupId = body.group_id || body.recipient?.id || GROUP_ID;
       if (!groupId) {
         console.warn('⚠️ Không có groupId, bỏ qua leave.');
         return res.status(200).send('OK');
       }
-      let userId = body.user_id || body.sender?.id || null;
+      let userId = body.user_id || body.sender?.id;
       let userName = body.user_name || body.sender?.name || body.from?.display_name || 'Một thành viên';
       let goodbyeMsg = await getConfig('goodbye_message') || '👋 Tạm biệt {name} đã rời khỏi nhóm.';
       const finalMsg = goodbyeMsg
@@ -458,65 +448,46 @@ app.post('/webhook', async (req, res) => {
       return res.status(200).send('OK');
     }
 
-    // ---- XỬ LÝ TIN NHẮN ----
+    // MESSAGE
     if (eventName === 'message.text.received' || eventName === 'user_send_group_text') {
       const messageData = body.message || {};
       const rawText = messageData.text || body.text || '';
       const chat = messageData.chat || body.chat || {};
       const chatType = chat.chat_type || body.chat_type || 'GROUP';
       const chatId = chat.id || body.recipient?.id || body.group_id || GROUP_ID;
-
-      // Lấy senderId
       let senderId = body.sender?.id || messageData.from?.id || body.from?.id || body.user_id || messageData.sender?.id;
-      if (!senderId) {
-        console.warn('⚠️ Không tìm thấy senderId trong tin nhắn.');
-      }
 
       if (!chatId) {
         console.warn('⚠️ Không có chatId, bỏ qua tin nhắn.');
         return res.status(200).send('OK');
       }
-
-      // Chỉ xử lý tin nhắn nhóm
       if (chatType !== 'GROUP') {
         console.log('🔇 Tin nhắn riêng, bỏ qua.');
         return res.status(200).send('OK');
       }
 
-      // ---- Kiểm tra xem tin nhắn có tag bot không ----
       const hasTag = /^@\S+/.test(rawText.trim());
       const cleanedText = rawText.replace(/^@\S+\s*/, '').trim();
 
-      // Trường hợp 1: Chỉ tag bot, không nhắn gì thêm
+      // Chỉ tag bot
       if (hasTag && cleanedText === '') {
         await sendZaloMessage(chatId, getRandomReply());
         return res.status(200).send('OK');
       }
 
-      // Trường hợp 2: Có tag bot và có nội dung
-      if (hasTag) {
-        // Kiểm tra nếu cleanedText bắt đầu bằng '/' => đây là lệnh
-        if (cleanedText.startsWith('/')) {
-          const isCommand = await handleCommand(cleanedText, chatId, senderId);
-          if (isCommand) {
-            // Đã xử lý lệnh (kể cả lệnh sai), không chạy filter
-            return res.status(200).send('OK');
-          }
-          // Nếu handleCommand trả về false (không xảy ra vì đã startsWith('/')), vẫn cho chạy filter
-        }
-        // Nếu không bắt đầu bằng '/', đây là tin nhắn thường (không phải lệnh)
-        // Chạy filter trên cleanedText
+      // Tag bot + có nội dung
+      if (hasTag && cleanedText !== '') {
+        const isCommand = await handleCommand(cleanedText, chatId, senderId);
+        if (isCommand) return res.status(200).send('OK');
         await handleFilter(cleanedText, chatId);
         return res.status(200).send('OK');
       }
 
-      // Trường hợp 3: Tin nhắn thường không tag bot
-      // Chạy filter trên rawText gốc
+      // Không tag bot
       await handleFilter(rawText, chatId);
       return res.status(200).send('OK');
     }
 
-    // ---- CÁC SỰ KIỆN KHÁC ----
     console.log(`ℹ️ Sự kiện không hỗ trợ: ${eventName}`);
     res.status(200).send('OK');
 
@@ -527,15 +498,15 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ================================================================
-// 10. ENDPOINT KIỂM TRA
+// 9. ENDPOINT KIỂM TRA
 // ================================================================
 app.get('/', (req, res) => {
   res.send('Bot Zalo is Running!');
 });
 
 // ================================================================
-// 11. KHỞI ĐỘNG SERVER
+// 10. KHỞI ĐỘNG SERVER
 // ================================================================
 app.listen(PORT, () => {
-  console.log(`🚀 Bot đang chạy tại cổng ${PORT}`);
+  console.log(`🚀 Bot đang chạhy tại cổng ${PORT}`);
 });
