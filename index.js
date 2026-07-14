@@ -515,30 +515,12 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ================================================================
-// 9. ENDPOINT DÀNH RIÊNG CHO CRON-JOB (GIỮ THỨC BOT & SUPABASE)
+// 9. ENDPOINT KIỂM TRA
 // ================================================================
-app.get('/keep-alive', async (req, res) => {
-  try {
-    console.log('🔄 [Cron-job] Nhận tín hiệu ping giữ thức hệ thống...');
-    
-    // Gửi một truy vấn siêu nhẹ đến Supabase để ép nó phải hoạt động
-    const { data, error } = await supabase
-      .from('bot_config')
-      .select('key')
-      .limit(1);
-
-    if (error) {
-      console.error('❌ [Cron-job] Supabase lỗi kết nối:', error.message);
-      return res.status(500).send('Supabase Error');
-    }
-
-    console.log('✅ [Cron-job] Đã ping thành công cả Hugging Face và Supabase!');
-    return res.status(200).send('Bot and Supabase are Active!');
-  } catch (err) {
-    console.error('💥 [Cron-job] Lỗi hệ thống:', err.message);
-    return res.status(500).send('System Error');
-  }
+app.get('/', (req, res) => {
+  res.send('Bot Zalo is Running!');
 });
+
 
 // ================================================================
 // 10. KHỞI ĐỘNG SERVER
