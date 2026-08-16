@@ -12,8 +12,7 @@ const {
   GROUP_ID,
   ADMIN_NAME = 'Admin',
   VICE_NAME = 'Phó nhóm',
-  ADMIN_ID,
-  BOT_NAME = 'Bot Mahiru'  // 👈 THÊM BIẾN NÀY: tên hiển thị của bot
+  ADMIN_ID
 } = process.env;
 
 if (!ZALO_BOT_TOKEN || !SUPABASE_URL || !SUPABASE_KEY) {
@@ -58,7 +57,7 @@ async function sendZaloMessage(chatId, text) {
 }
 
 // ================================================================
-// 4. HÀM TRUY VẤN SUPABASE (GIỮ NGUYÊN)
+// 4. HÀM TRUY VẤN SUPABASE
 // ================================================================
 async function getConfig(key) {
   const { data, error } = await supabase
@@ -97,6 +96,7 @@ async function removeConfig(key) {
   return true;
 }
 
+// Lấy tất cả các filter key (có prefix 'filter_')
 async function getAllFilters() {
   const { data, error } = await supabase
     .from('bot_config')
@@ -184,7 +184,7 @@ function isAdmin(userId) {
   }
 }
 
-// Mảng câu trả lời "bố láo"
+// Mảng câu trả lời "bố láo" / cà khịa ngẫu nhiên
 const RANDOM_REPLIES = [
   'Tag cái gì mà tag, thích ăn đấm không? 😡',
   'Kêu bố có việc gì đấy con trai? 😏',
@@ -210,12 +210,11 @@ function getRandomInsult() {
 }
 
 // ================================================================
-// 6. XỬ LÝ LỆNH
+// 6. XỬ LÝ LỆNH (MỚI: /link, /addlink, /removelink, /filter, /stop, /filters, /help)
 // ================================================================
+
 function parseCommand(rawText) {
-  // Sử dụng BOT_NAME để loại bỏ tag một cách chính xác
-  const botName = process.env.BOT_NAME || 'Bot Mahiru';
-  const cleaned = rawText.replace(new RegExp('^@' + botName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*'), '').trim();
+  const cleaned = rawText.replace(/^@\S+\s*/, '').trim();
   const slashIndex = cleaned.indexOf('/');
   if (slashIndex === -1) return null;
   const commandPart = cleaned.slice(slashIndex).trim();
@@ -227,6 +226,7 @@ function parseCommand(rawText) {
   };
 }
 
+// Hàm trả về bảng hướng dẫn lỗi cú pháp (có bổ sung /help)
 function getSyntaxHelp() {
   return (
     '⚠️ Lệnh không hợp lệ hoặc sai cú pháp rồi!\n\n' +
@@ -246,7 +246,10 @@ function getSyntaxHelp() {
 
 async function handleCommand(rawText, chatId, senderId) {
   const parsed = parseCommand(rawText);
-  if (!parsed) return false;
+  if (!parsed) {
+    // Không có dấu / -> không phải lệnh
+    return false;
+  }
 
   const { command, args } = parsed;
 
@@ -259,6 +262,7 @@ async function handleCommand(rawText, chatId, senderId) {
   };
 
   switch (command) {
+    // ====== LỆNH CÔNG KHAI ======
     case '/help': {
       const helpMsg =
         '📋 HƯỚNG DẪN SỬ DỤNG BOT:\n\n' +
@@ -314,6 +318,7 @@ async function handleCommand(rawText, chatId, senderId) {
       return true;
     }
 
+    // ====== LỆNH ADMIN ======
     case '/addlink': {
       if (!(await requireAdmin())) return true;
       if (args.length < 2) {
@@ -378,6 +383,7 @@ async function handleCommand(rawText, chatId, senderId) {
       return true;
     }
 
+    // ====== LỆNH KHÔNG HỢP LỆ ======
     default: {
       await sendZaloMessage(chatId, getSyntaxHelp());
       return true;
@@ -386,23 +392,17 @@ async function handleCommand(rawText, chatId, senderId) {
 }
 
 // ================================================================
-// 7. XỬ LÝ FILTER TỰ ĐỘNG
+// 7. XỬ LÝ TRIGGER TỰ ĐỘNG (Filter)
 // ================================================================
-async function handleFilter(text, chatId) {
-  if (!text) return false;
-  console.log(`🔍 [handleFilter] Đang kiểm tra text: "${text}"`);
+async function handleFilter(rawText, chatId) {
   const filters = await getAllFilters();
-  console.log(`🔍 [handleFilter] Số filter tìm thấy: ${filters.length}`);
-  const lowerText = text.toLowerCase();
   for (const f of filters) {
-    const keyword = f.key.replace('filter_', '').toLowerCase();
-    if (lowerText.includes(keyword)) {
-      console.log(`🔍 [handleFilter] Match! keyword="${keyword}", response="${f.value}"`);
+    const keyword = f.key.replace('filter_', '');
+    if (rawText.includes(keyword)) {
       await sendZaloMessage(chatId, f.value);
       return true;
     }
   }
-  console.log('🔍 [handleFilter] Không có filter nào match.');
   return false;
 }
 
@@ -474,34 +474,25 @@ app.post('/webhook', async (req, res) => {
         return res.status(200).send('OK');
       }
 
-      // ---- LOẠI BỎ TAG BOT CHÍNH XÁC BẰNG BOT_NAME ----
-      const botName = process.env.BOT_NAME || 'Bot Mahiru';
-      // Escape regex special chars
-      const escapedBotName = botName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const tagRegex = new RegExp('^@' + escapedBotName + '\\s*');
-      let textToProcess = rawText.trim();
-      const hasTag = textToProcess.match(tagRegex);
-      if (hasTag) {
-        textToProcess = textToProcess.replace(tagRegex, '').trim();
-      }
+      const hasTag = /^@\S+/.test(rawText.trim());
+      const cleanedText = rawText.replace(/^@\S+\s*/, '').trim();
 
-      console.log(`🔍 [DEBUG] rawText: "${rawText}"`);
-      console.log(`🔍 [DEBUG] textToProcess: "${textToProcess}"`);
-
-      // Trường hợp: chỉ tag bot, không nội dung
-      if (textToProcess === '') {
+      // Chỉ tag bot
+      if (hasTag && cleanedText === '') {
         await sendZaloMessage(chatId, getRandomReply());
         return res.status(200).send('OK');
       }
 
-      // Xử lý lệnh (nếu có dấu '/')
-      const isCommand = await handleCommand(textToProcess, chatId, senderId);
-      if (isCommand) {
+      // Tag bot + có nội dung
+      if (hasTag && cleanedText !== '') {
+        const isCommand = await handleCommand(cleanedText, chatId, senderId);
+        if (isCommand) return res.status(200).send('OK');
+        await handleFilter(cleanedText, chatId);
         return res.status(200).send('OK');
       }
 
-      // Xử lý filter tự động
-      await handleFilter(textToProcess, chatId);
+      // Không tag bot
+      await handleFilter(rawText, chatId);
       return res.status(200).send('OK');
     }
 
@@ -515,10 +506,26 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ================================================================
-// 9. ENDPOINT KIỂM TRA
+// 9. ENDPOINT KIỂM TRA & PING KÍCH HOẠT (Hugging Face + Supabase Keep-Alive)
 // ================================================================
 app.get('/', (req, res) => {
   res.send('Bot Zalo is Running!');
+});
+
+app.get('/ping', async (req, res) => {
+  try {
+    // Truy vấn nhẹ đến Supabase để đảm bảo Supabase luôn hoạt động (không bị pause sau 7 ngày)
+    const { data, error } = await supabase.from('bot_config').select('key').limit(1);
+    if (error) {
+      console.error('⚠️ Supabase Ping error:', error.message);
+      return res.status(500).json({ status: 'error', message: 'Supabase ping failed', details: error.message });
+    }
+    console.log('⚡ Keep-alive ping thành công (Hugging Face + Supabase active)');
+    return res.status(200).json({ status: 'ok', supabase: 'connected', timestamp: new Date().toISOString() });
+  } catch (err) {
+    console.error('💥 Ping error:', err.message);
+    return res.status(500).json({ status: 'error', message: err.message });
+  }
 });
 
 // ================================================================
