@@ -529,8 +529,144 @@ app.get('/ping', async (req, res) => {
 });
 
 // ================================================================
-// 10. KHỞI ĐỘNG SERVER
+// 10. NHẮC NHỞ ĐỒNG PHỤC (GIỜ VIỆT NAM - UTC+7)
+//     Chủ nhật 21:00 -> nhắc thứ 2 mặc áo trắng
+//     Thứ tư   21:00 -> nhắc thứ 5 mặc áo xanh cam
+//     Thứ 2    06:00 -> nhắc lại áo trắng
+//     Thứ 2    06:30 -> nhắc lại áo trắng
+//     Thứ 5    06:00 -> nhắc lại áo xanh cam
+//     Thứ 5    06:30 -> nhắc lại áo xanh cam
+// ================================================================
+function getVietnamTime() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(new Date());
+
+  const values = {};
+  for (const part of parts) {
+    if (part.type !== 'literal') values[part.type] = part.value;
+  }
+
+  const weekdayMap = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6
+  };
+
+  return {
+    date: `${values.year}-${values.month}-${values.day}`,
+    weekday: weekdayMap[values.weekday],
+    hour: Number(values.hour),
+    minute: Number(values.minute)
+  };
+}
+
+async function sendUniformReminder(slot, text) {
+  if (!GROUP_ID) {
+    console.warn('⚠️ Chưa có GROUP_ID, không thể gửi nhắc đồng phục.');
+    return;
+  }
+
+  const { date } = getVietnamTime();
+  const configKey = `uniform_reminder_${slot}_last_sent`;
+  const lastSent = await getConfig(configKey);
+
+  // Lưu ngày đã gửi trong Supabase để tránh gửi trùng nếu tiến trình bị restart.
+  if (lastSent === date) return;
+
+  try {
+    await sendZaloMessage(GROUP_ID, text);
+    await setConfig(configKey, date);
+    console.log(`👕 Đã gửi nhắc đồng phục [${slot}] cho ngày ${date}`);
+  } catch (error) {
+    console.error(`❌ Không gửi được nhắc đồng phục [${slot}]:`, error.message);
+  }
+}
+
+async function checkUniformSchedule() {
+  const now = getVietnamTime();
+  const time = `${String(now.hour).padStart(2, '0')}:${String(now.minute).padStart(2, '0')}`;
+
+  // Chủ nhật 21:00: nhắc ngày mai (thứ 2) mặc áo trắng.
+  if (now.weekday === 0 && time === '21:00') {
+    await sendUniformReminder(
+      'sun_21_white',
+      '👕🔔 NHẮC NHỞ\n\nMai là THỨ 2 nhé!\nNhớ mặc ÁO TRẮNG đi học nha 🤍'
+    );
+    return;
+  }
+
+  // Thứ tư 21:00: nhắc ngày mai (thứ 5) mặc áo xanh cam.
+  if (now.weekday === 3 && time === '21:00') {
+    await sendUniformReminder(
+      'wed_21_blue_orange',
+      '🟦🟧🔔 NHẮC NHỞ\n\nMai là THỨ 5 nhé!\nNhớ mặc ÁO XANH CAM đi học nha 🟦🟧'
+    );
+    return;
+  }
+
+  // Thứ 2: nhắc lại lúc 06:00 và 06:30.
+  if (now.weekday === 1 && time === '06:00') {
+    await sendUniformReminder(
+      'mon_06_white',
+      '👕☀️ Chào buổi sáng!\n\nHôm nay là THỨ 2.\nNhớ mặc ÁO TRẮNG đi học nhé 🤍'
+    );
+    return;
+  }
+
+  if (now.weekday === 1 && time === '06:30') {
+    await sendUniformReminder(
+      'mon_0630_white',
+      '👕⏰ NHẮC LẠI NÈ!\n\nHôm nay THỨ 2 rồi đó!\nNhớ mặc ÁO TRẮNG trước khi đi học nha 🤍'
+    );
+    return;
+  }
+
+  // Thứ 5: nhắc lại lúc 06:00 và 06:30.
+  if (now.weekday === 4 && time === '06:00') {
+    await sendUniformReminder(
+      'thu_06_blue_orange',
+      '🟦🟧☀️ Chào buổi sáng!\n\nHôm nay là THỨ 5.\nNhớ mặc ÁO XANH CAM đi học nhé 🟦🟧'
+    );
+    return;
+  }
+
+  if (now.weekday === 4 && time === '06:30') {
+    await sendUniformReminder(
+      'thu_0630_blue_orange',
+      '🟦🟧⏰ NHẮC LẠI NÈ!\n\nHôm nay THỨ 5 rồi đó!\nNhớ mặc ÁO XANH CAM trước khi đi học nha 🟦🟧'
+    );
+  }
+}
+
+// Kiểm tra định kỳ để không phụ thuộc vào webhook của Zalo.
+// Không cần thêm package mới, nên không đụng vào package.json.
+setInterval(() => {
+  checkUniformSchedule().catch(error => {
+    console.error('❌ Lỗi scheduler nhắc đồng phục:', error);
+  });
+}, 15000);
+
+// Chạy một lần ngay khi bot khởi động để scheduler sẵn sàng.
+checkUniformSchedule().catch(error => {
+  console.error('❌ Lỗi khởi động scheduler nhắc đồng phục:', error);
+});
+
+// ================================================================
+// 11. KHỞI ĐỘNG SERVER
 // ================================================================
 app.listen(PORT, () => {
   console.log(`🚀 Bot đang chạy tại cổng ${PORT}`);
+  console.log('👕 Scheduler đồng phục: múi giờ Asia/Ho_Chi_Minh (UTC+7)');
 });
