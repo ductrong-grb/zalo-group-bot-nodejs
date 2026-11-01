@@ -74,7 +74,7 @@ Theo hướng dẫn Zalo, luồng tạo Bot đi qua ứng dụng **Zalo Bot Crea
 | Lệnh quản lý link / nội dung | Có trong source | Lưu ở bảng `bot_triggers` |
 | Filter tự động trả lời | Có trong source | Dò chuỗi con bằng `includes()` |
 | Phân quyền Admin | Có trong source | So khớp ID với `ADMIN_ID` |
-| Lịch nhắc đồng phục | Có trong source | Lịch cố định, gửi đến `GROUP_ID` |
+| Lịch nhắc  | Có trong source | Lịch cố định, gửi đến `GROUP_ID` |
 | Endpoint `/ping` | Có trong source | Chỉ kiểm tra truy vấn Supabase |
 | Chào thành viên mới | Chưa xác minh / không cam kết | Có nhánh code nhưng event không nằm trong danh sách webhook công khai đang được tài liệu mô tả |
 | Tạm biệt thành viên rời nhóm | Chưa xác minh / không cam kết | Tương tự phần chào thành viên |
@@ -840,3 +840,6 @@ Source được phát triển với sự hỗ trợ của AI; người đăng re
 **Dùng để học, nghịch và tự sửa thì được. Đừng coi README là giấy bảo hành phần mềm.**
 
 </div>
+
+
+README.md cũng là AI viết
