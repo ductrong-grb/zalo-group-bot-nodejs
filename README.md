@@ -674,18 +674,18 @@ docker stop zalo-group-bot
 
 <a id="lich-dong-phuc"></a>
 
-## 👕 Lịch nhắc đồng phục
+##  Lịch nhắc 
 
 Đây là tính năng viết cứng trong `index.js`, theo múi giờ `Asia/Ho_Chi_Minh` (UTC+7). Không có lệnh để bật/tắt hoặc cấu hình lịch từ chat.
 
 | Ngày | Giờ | Nội dung trong source |
 |---|---|---|
-| Chủ nhật | 21:00 | Nhắc ngày mai (thứ Hai) mặc áo trắng |
-| Thứ Hai | 06:00 | Nhắc mặc áo trắng |
-| Thứ Hai | 06:30 | Nhắc lại mặc áo trắng |
-| Thứ Tư | 21:00 | Nhắc ngày mai (thứ Năm) mặc áo xanh cam |
-| Thứ Năm | 06:00 | Nhắc mặc áo xanh cam |
-| Thứ Năm | 06:30 | Nhắc lại mặc áo xanh cam |
+| Chủ nhật | 21:00 | (thứ Hai)  |
+| Thứ Hai | 06:00 | |
+| Thứ Hai | 06:30 |  |
+| Thứ Tư | 21:00 |  |
+| Thứ Năm | 06:00 |  |
+| Thứ Năm | 06:30 | |
 
 ### Lịch hoạt động thế nào?
 
