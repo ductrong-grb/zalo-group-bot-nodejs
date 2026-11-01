@@ -24,7 +24,7 @@ Không phải sản phẩm hoàn chỉnh · Không cam kết uptime · Không kh
 
 1. [Giới thiệu](#gioi-thieu)
 2. [Trạng thái dự án](#trang-thai-du-an)
-3. [Vì sao source ?](#vi-sao-source-lo)
+3. [Vì sao source ?](#vi-sao-source-)
 4. [Công nghệ và cấu trúc source](#cong-nghe-va-cau-truc-source)
 5. [Các chức năng có trong code](#cac-chuc-nang-co-trong-code)
 6. [Các lệnh bot](#cac-lenh-bot)
@@ -88,7 +88,7 @@ Theo hướng dẫn Zalo, luồng tạo Bot đi qua ứng dụng **Zalo Bot Crea
 
 <a id="vi-sao-source-lo"></a>
 
-## 🗑️ Vì sao gọi source này là source lỏ?
+## 🗑️ source 
 
 Nói trước cho đỡ mất công kỳ vọng:
 
