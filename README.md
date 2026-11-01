@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🤖 Zalo Group Bot — bản lỏ
+# 🤖 Zalo Group Bot — 
 
 ### Một con bot nhóm Zalo được AI phụ viết, người viết phụ... lười dọn.
 
@@ -24,7 +24,7 @@ Không phải sản phẩm hoàn chỉnh · Không cam kết uptime · Không kh
 
 1. [Giới thiệu](#gioi-thieu)
 2. [Trạng thái dự án](#trang-thai-du-an)
-3. [Vì sao source lỏ?](#vi-sao-source-lo)
+3. [Vì sao source ?](#vi-sao-source-lo)
 4. [Công nghệ và cấu trúc source](#cong-nghe-va-cau-truc-source)
 5. [Các chức năng có trong code](#cac-chuc-nang-co-trong-code)
 6. [Các lệnh bot](#cac-lenh-bot)
